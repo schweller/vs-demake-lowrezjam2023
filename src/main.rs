@@ -1,12 +1,34 @@
-use std::{time::Duration, ops::Sub};
+use std::time::Duration;
 
-use macroquad::{prelude::*, ui::{widgets::{self, Group}, root_ui}, hash};
+use macroquad::prelude::*;
+use ::rand::Rng;
+
+// Spawning enemies
+// - decide where to spawn
+// - spawn 
+// - fix spawning to compensate for bottom UI
+// Scale difficulty
+// - harder to level up
+// - harder enemies
+// - more enemies?
+// Juicing
+// - screen shake
+// - flash enemie on hit
+// - particles?
+// - animate sprites
+// Level up
+// - Change state
+// - Render upgrade choices
+
+// Improve collision
+// Improve 
 
 fn window_conf() -> Conf {
     Conf { 
         window_title: "Rustlike".to_owned(), 
         window_width: 640, // 640 + 120 
         window_height: 640, // 320 + 120
+        high_dpi: true,
         ..Default::default()
     }
 }
@@ -32,8 +54,6 @@ pub struct Collider {
     pub height: i32,
     pub radius: f32
 }
-
-fn draw_all(texture: Texture2D) {}
 
 fn sprite_rect(ix: u32) -> Rect {
     let sw = 8. as f32;
@@ -189,20 +209,6 @@ DrawTextureParams {
     })
 }
 
-fn draw_ui() {
-    Group::new(hash!(), vec2(screen_width(), 40.))
-    .ui(&mut *root_ui(), |ui| {
-        draw_rectangle(0., 0., 10., 10., RED);
-    });
-    // widgets::Window::new(
-    //     hash!(), 
-    // vec2(0., screen_height() - 20.),
-    //     vec2(screen_width(), 20.))
-    //     .ui(&mut *root_ui(), |ui| {
-    //         draw_rectangle(10., 10., 10., 10., RED);
-    //     });
-}
-
 pub struct Bullet {
     x: f32,
     y: f32,
@@ -285,7 +291,9 @@ fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
             bullet.y -= bullet.dir_y * delta * 20.;
         }
     }
+}
 
+fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp: &mut f32) {
     for e in enemies.iter_mut() {
         for bullet in bullets.iter_mut() {
             // Collide with enemies
@@ -296,12 +304,53 @@ fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
             ) {
                 e.alive = false;
                 bullet.active = false;
+                *player_xp += 40.;
             }
         }
     }
 }
 
-const PLAYER_SPEED: f32 = 20.;
+fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &f32) {
+    // get a random position away from the player
+    // add an enemy to that position
+    let direction = rand::gen_range(-1, 2) as f32;
+    let random;
+    let mut rng = ::rand::thread_rng();
+    match rng.gen_range(0..=1) {
+        0 => random = -1.,
+        _ => random = 1.,
+    }
+
+    let _rad = 72. + (rand::gen_range(0., 33.) as f32).floor();
+    let x = player_pos_x + direction.cos() * _rad * random;
+    let y = player_pos_y + direction.sin() * _rad * random;
+
+    enemies.push(
+        Enemies {
+            position: Position {
+                x,
+                y,
+            },
+            collider: Collider { 
+                x: 72.,
+                y: 90.,
+                width: 8, 
+                height: 8,
+                radius: 4. 
+            },
+            alive: true
+        }
+    );
+}
+
+fn level_up_player(player_xp: &mut f32, player_max_xp: &mut f32, mut player_level: &mut i32) {
+    if player_xp >= player_max_xp {
+        *player_xp = 0.;
+        *player_level += 1;
+    }
+}
+
+const PLAYER_SPEED: f32 = 10.;
 
 fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool) {
     let delta = get_frame_time();
@@ -328,13 +377,22 @@ async fn main() {
     let mut camera_focal_y = screen_height() / 2.0;
     let mut camera_focal_x = screen_width() / 2.0;
     let main_area_width = 570.;
-    let mut camera_zoom : f32 = 10.0;
+    let camera_zoom : f32 = 10.0;
 
     let main_texture = load_texture("assets/vs-dx-atlas-padded.png").await.unwrap();
     main_texture.set_filter(FilterMode::Nearest);
 
     let mut player_pos_x = 64.;
     let mut player_pos_y = 64.;
+    let player_max_hp = 100.;
+    let mut player_hp = player_max_hp;
+    let mut current_player_hp_percentage; 
+
+    let mut player_max_xp = 100.;
+    let mut player_xp = 1.;
+    let mut player_level = 1;
+    let mut current_player_xp_percentage;     
+
     let mut player_flip_x: bool = false;
 
     let mut enemies: Vec<Enemies> = Vec::new();
@@ -342,73 +400,8 @@ async fn main() {
     let max_cooldown = Duration::from_secs(15).as_millis();
     let mut bullet_cooldown = max_cooldown;
 
-    enemies.push(
-        Enemies {
-            position: Position {
-                x: 72.,
-                y: 90.,
-            },
-            collider: Collider { 
-                x: 72., 
-                y: 90., 
-                width: 8, 
-                height: 8,
-                radius: 4.
-            },
-            alive: true
-        }
-    );
-
-    enemies.push(
-        Enemies {
-            position: Position {
-                x: 89.,
-                y: 64.,
-            },
-            collider: Collider { 
-                x: 72., 
-                y: 90., 
-                width: 8, 
-                height: 8,
-                radius: 4.
-            },
-            alive: true
-        }
-    );
-
-    enemies.push(
-        Enemies {
-            position: Position {
-                x: 56.,
-                y: 48.,
-            },
-            collider: Collider { 
-                x: 72., 
-                y: 90., 
-                width: 8, 
-                height: 8,
-                radius: 4.
-            },
-            alive: true
-        }
-    );
-
-    enemies.push(
-        Enemies {
-            position: Position {
-                x: 40.,
-                y: 64.,
-            },
-            collider: Collider { 
-                x: 72., 
-                y: 90., 
-                width: 8, 
-                height: 8,
-                radius: 4. 
-            },
-            alive: true
-        }
-    );
+    let max_enemy_cooldown = Duration::from_secs(8).as_millis();
+    let mut enemy_cooldown = max_enemy_cooldown;
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -416,9 +409,6 @@ async fn main() {
         let camera_buffer = (screen_height() / camera_zoom) * 2.0 * 0.1;
         camera_focal_y = player_pos_y;
         camera_focal_x = player_pos_x;
-
-        set_default_camera();
-        draw_ui();
 
         set_camera(&Camera2D {
             target: vec2(camera_focal_x + 4., camera_focal_y + 4.),
@@ -444,22 +434,54 @@ async fn main() {
         draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
         draw_enemies_collider(&mut enemies);
 
-        draw_bullets(main_texture, &mut bullets);
-        update_bullets(&mut bullets, &mut enemies);
-
-        if bullet_cooldown <= 0 {
-            spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-            bullet_cooldown = max_cooldown;
+        if enemy_cooldown <= 0 {
+            spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
+            enemy_cooldown = max_enemy_cooldown;
         } else {
-            bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+            enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
         }
 
-        // println!("{}", bullet_cooldown);
+        draw_bullets(main_texture, &mut bullets);
+        update_bullets(&mut bullets, &mut enemies);
+        damage_enemy(&mut bullets, &mut enemies, &mut player_xp);
+        level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level);
 
+        // if bullet_cooldown <= 0 {
+        //     spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+        //     bullet_cooldown = max_cooldown;
+        // } else {
+        //     bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+        // }
+
+        // Get rid of these entities
         bullets.retain(|b| b.active);
         enemies.retain(|e| e.alive);
 
         set_default_camera();
+
+        // In-level UI
+        draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
+        // HP
+        current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
+        draw_rectangle(
+            90.,
+            screen_height() - 60., 
+            ((screen_width() - 90.)*current_player_hp_percentage)/100., 
+            15., 
+            RED
+        );
+        // XP
+        current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
+        draw_rectangle(
+            90.,
+            screen_height() - 30., 
+            ((screen_width() - 90.)*current_player_xp_percentage)/100., 
+            15., 
+            BLUE
+        );
+        //Player level
+        draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);
+
         next_frame().await;
     }
 }
