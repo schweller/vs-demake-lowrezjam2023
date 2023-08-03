@@ -1,6 +1,6 @@
-use std::time::Duration;
+use std::{time::Duration, ops::Sub};
 
-use macroquad::prelude::*;
+use macroquad::{prelude::*, ui::{widgets::{self, Group}, root_ui}, hash};
 
 fn window_conf() -> Conf {
     Conf { 
@@ -14,7 +14,8 @@ fn window_conf() -> Conf {
 #[derive(Clone, Copy)]
 pub struct Enemies {
     pub position: Position,
-    pub collider: Collider
+    pub collider: Collider,
+    pub alive: bool
 }
 
 #[derive(Clone, Copy)]
@@ -121,17 +122,19 @@ fn get_dir_(vec1: Position, vec2: Position) -> f32 {
 }
 
 fn update_enemies_pushing(enemies: &mut Vec<Enemies>) {
-    for i in 0..enemies.len() - 1 {
-        for j in i+1..enemies.len() {
-            // let r = enemies[i].collider.radius + enemies[j].collider.radius;
-            let r = 8.;
-            if col(enemies[i].position, enemies[j].position, r) {
-                // println!("enemies colliding!");
-                let dist = dist(enemies[i].position, enemies[j].position, 10.);
-                let dir = get_dir_(enemies[i].position, enemies[j].position);
-                let dif = r - dist;
-                enemies[i].position.x += dir.cos()*dif;
-                enemies[i].position.y += dir.sin()*dif;
+    if enemies.len() > 0 {
+        for i in 0..enemies.len() - 1 {
+            for j in i+1..enemies.len() {
+                // let r = enemies[i].collider.radius + enemies[j].collider.radius;
+                let r = 8.;
+                if col(enemies[i].position, enemies[j].position, r) {
+                    // println!("enemies colliding!");
+                    let dist = dist(enemies[i].position, enemies[j].position, 10.);
+                    let dir = get_dir_(enemies[i].position, enemies[j].position);
+                    let dif = r - dist;
+                    enemies[i].position.x += dir.cos()*dif;
+                    enemies[i].position.y += dir.sin()*dif;
+                }
             }
         }
     }
@@ -186,6 +189,20 @@ DrawTextureParams {
     })
 }
 
+fn draw_ui() {
+    Group::new(hash!(), vec2(screen_width(), 40.))
+    .ui(&mut *root_ui(), |ui| {
+        draw_rectangle(0., 0., 10., 10., RED);
+    });
+    // widgets::Window::new(
+    //     hash!(), 
+    // vec2(0., screen_height() - 20.),
+    //     vec2(screen_width(), 20.))
+    //     .ui(&mut *root_ui(), |ui| {
+    //         draw_rectangle(10., 10., 10., 10., RED);
+    //     });
+}
+
 pub struct Bullet {
     x: f32,
     y: f32,
@@ -218,37 +235,66 @@ fn draw_bullets(texture: Texture2D, bullets: &mut Vec<Bullet>) {
 
 fn spawn_bullet(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut f32) {
     let mut _dist= 128.;
-    let mut _dir = Vec2::new(-1., -1.);
-    for e in enemies.iter() {
-        let _d = dist(
-            Position { x: *x, y: *y },
-            e.position,
-        _dist);
-        if _d < _dist {
-            _dist= _d;
-            // _dir = get_dir(e.position.x,e.position.y,*x,*y);
-            _dir = Vec2::new(*x, *y) - Vec2::new(e.position.x, e.position.y);
+    let mut _dir: Vec2 = vec2(1.,1.);
+    if enemies.len() > 0 {
+        for e in enemies.iter() {
+            let _d = dist(
+                Position { x: *x, y: *y },
+                e.position,
+            _dist);
+            if _d < _dist {
+                _dist= _d;
+                // _dir = get_dir(e.position.x,e.position.y,*x,*y);
+                // let foo = na::Vector2::new(*x, *y);
+                // let bar = na::Vector2::new(e.position.x, e.position.y);
+                // _dir = foo.sub(bar).norm();
+                println!("{}", _dir);
+                _dir = Vec2::new(*x, *y) - Vec2::new(e.position.x, e.position.y);
+                if let Some(d) = _dir.try_normalize() {
+                    _dir = d;
+                }
+            }
         }
+        bullets.push(Bullet { x: *x + 2., y: *y + 2., dir_x: _dir.x, dir_y: _dir.y, active: true });
     }
-    bullets.push(Bullet { x: *x + 2., y: *y + 2., dir_x: _dir.x, dir_y: _dir.y, active: true });
+}
+
+fn get_normalized(vec2: Vec2) -> Vec2 {
+    if vec2.x > 0. && vec2.y > 0. {
+        return Vec2::new(1., 1.);
+    }
+    if vec2.x < 0. && vec2.y < 0. {
+        return Vec2::new(-1., -1.);
+    }
+    if vec2.x > 0. && vec2.y < 0. {
+        return Vec2::new(1., -1.);
+    }
+    if vec2.x < 0. && vec2.y > 0. {
+        return Vec2::new(-1., 1.);
+    }
+
+    return Vec2::new(0., 0.);
 }
 
 fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
     let delta = get_frame_time();
     for bullet in bullets.iter_mut() {
         if bullet.active {
-            bullet.x -= bullet.dir_x * delta * 0.5; 
-            bullet.y -= bullet.dir_y * delta * 0.5;
+            // let bull_vec = Vec2::new(bullet.x, bullet.y);
+            bullet.x -= bullet.dir_x * delta * 20.; 
+            bullet.y -= bullet.dir_y * delta * 20.;
         }
     }
 
-    for e in enemies.iter() {
+    for e in enemies.iter_mut() {
         for bullet in bullets.iter_mut() {
+            // Collide with enemies
             if col(
                 Position { x: bullet.x, y: bullet.y }, 
                 Position { x: e.position.x + 2., y: e.position.y + 2. }, 
                 5.
             ) {
+                e.alive = false;
                 bullet.active = false;
             }
         }
@@ -308,57 +354,61 @@ async fn main() {
                 width: 8, 
                 height: 8,
                 radius: 4.
-            } 
+            },
+            alive: true
         }
     );
 
-    // enemies.push(
-    //     Enemies {
-    //         position: Position {
-    //             x: 89.,
-    //             y: 64.,
-    //         },
-    //         collider: Collider { 
-    //             x: 72., 
-    //             y: 90., 
-    //             width: 8, 
-    //             height: 8,
-    //             radius: 4.
-    //         } 
-    //     }
-    // );
+    enemies.push(
+        Enemies {
+            position: Position {
+                x: 89.,
+                y: 64.,
+            },
+            collider: Collider { 
+                x: 72., 
+                y: 90., 
+                width: 8, 
+                height: 8,
+                radius: 4.
+            },
+            alive: true
+        }
+    );
 
-    // enemies.push(
-    //     Enemies {
-    //         position: Position {
-    //             x: 56.,
-    //             y: 48.,
-    //         },
-    //         collider: Collider { 
-    //             x: 72., 
-    //             y: 90., 
-    //             width: 8, 
-    //             height: 8,
-    //             radius: 4.
-    //         } 
-    //     }
-    // );
+    enemies.push(
+        Enemies {
+            position: Position {
+                x: 56.,
+                y: 48.,
+            },
+            collider: Collider { 
+                x: 72., 
+                y: 90., 
+                width: 8, 
+                height: 8,
+                radius: 4.
+            },
+            alive: true
+        }
+    );
 
-    // enemies.push(
-    //     Enemies {
-    //         position: Position {
-    //             x: 40.,
-    //             y: 64.,
-    //         },
-    //         collider: Collider { 
-    //             x: 72., 
-    //             y: 90., 
-    //             width: 8, 
-    //             height: 8,
-    //             radius: 4. 
-    //         } 
-    //     }
-    // );
+    enemies.push(
+        Enemies {
+            position: Position {
+                x: 40.,
+                y: 64.,
+            },
+            collider: Collider { 
+                x: 72., 
+                y: 90., 
+                width: 8, 
+                height: 8,
+                radius: 4. 
+            },
+            alive: true
+        }
+    );
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -366,6 +416,9 @@ async fn main() {
         let camera_buffer = (screen_height() / camera_zoom) * 2.0 * 0.1;
         camera_focal_y = player_pos_y;
         camera_focal_x = player_pos_x;
+
+        set_default_camera();
+        draw_ui();
 
         set_camera(&Camera2D {
             target: vec2(camera_focal_x + 4., camera_focal_y + 4.),
@@ -404,6 +457,7 @@ async fn main() {
         // println!("{}", bullet_cooldown);
 
         bullets.retain(|b| b.active);
+        enemies.retain(|e| e.alive);
 
         set_default_camera();
         next_frame().await;
