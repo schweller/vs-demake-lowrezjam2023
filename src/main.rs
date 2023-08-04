@@ -265,23 +265,6 @@ fn spawn_bullet(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, x: &mut f
     }
 }
 
-fn get_normalized(vec2: Vec2) -> Vec2 {
-    if vec2.x > 0. && vec2.y > 0. {
-        return Vec2::new(1., 1.);
-    }
-    if vec2.x < 0. && vec2.y < 0. {
-        return Vec2::new(-1., -1.);
-    }
-    if vec2.x > 0. && vec2.y < 0. {
-        return Vec2::new(1., -1.);
-    }
-    if vec2.x < 0. && vec2.y > 0. {
-        return Vec2::new(-1., 1.);
-    }
-
-    return Vec2::new(0., 0.);
-}
-
 fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
     let delta = get_frame_time();
     for bullet in bullets.iter_mut() {
@@ -343,10 +326,17 @@ fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &
     );
 }
 
-fn level_up_player(player_xp: &mut f32, player_max_xp: &mut f32, mut player_level: &mut i32) {
+fn level_up_player(player_xp: &mut f32, player_max_xp: &mut f32, mut player_level: &mut i32, state: &mut LevelState) {
     if player_xp >= player_max_xp {
         *player_xp = 0.;
         *player_level += 1;
+        *state = LevelState::LevelUp;
+    }
+}
+
+fn level_up_input(state: &mut LevelState) {
+    if is_key_pressed(KeyCode::Space) {
+        *state = LevelState::InGame;
     }
 }
 
@@ -368,6 +358,11 @@ fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool) {
     if is_key_down(KeyCode::Down) {
         *y += PLAYER_SPEED * delta;
     }
+}
+
+enum LevelState {
+    LevelUp,
+    InGame
 }
 
 #[macroquad::main(window_conf)]
@@ -403,6 +398,8 @@ async fn main() {
     let max_enemy_cooldown = Duration::from_secs(8).as_millis();
     let mut enemy_cooldown = max_enemy_cooldown;
 
+    let mut level_state = LevelState::LevelUp;
+
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
 
@@ -417,70 +414,107 @@ async fn main() {
             ..Default::default()
         });
 
-        move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x);
-
         for x in 0..80 {
             for y in 0..50 {
                 draw_map_cell(main_texture, x, y);
             }
         }
 
-        update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
-        update_enemies_pushing(&mut enemies);
+        match level_state {
+            LevelState::InGame => {
+                move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x);
+                update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
+                update_enemies_pushing(&mut enemies);
+                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x);
+                // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
+                draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_enemies_collider(&mut enemies);
+                if enemy_cooldown <= 0 {
+                    spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
+                    enemy_cooldown = max_enemy_cooldown;
+                } else {
+                    enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
+                }
+                draw_bullets(main_texture, &mut bullets);
+                update_bullets(&mut bullets, &mut enemies);
+                damage_enemy(&mut bullets, &mut enemies, &mut player_xp);
+                level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level, &mut level_state);
+        
+                if bullet_cooldown <= 0 {
+                    spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                    bullet_cooldown = max_cooldown;
+                } else {
+                    bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+                }
+        
+                // Get rid of things that shouldn't be around anymore
+                // Bullets, enemies, particles, pop-ups
+                bullets.retain(|b| b.active);
+                enemies.retain(|e| e.alive);
 
-        draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x);
-        // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
+                set_default_camera();
 
-        draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-        draw_enemies_collider(&mut enemies);
+                // In-level UI
+                draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
+                // HP
+                current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
+                draw_rectangle(
+                    90.,
+                    screen_height() - 60., 
+                    ((screen_width() - 90.)*current_player_hp_percentage)/100., 
+                    15., 
+                    RED
+                );
+                // XP
+                current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
+                draw_rectangle(
+                    90.,
+                    screen_height() - 30., 
+                    ((screen_width() - 90.)*current_player_xp_percentage)/100., 
+                    15., 
+                    BLUE
+                );
+                //Player level
+                draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);                
+            },
+            LevelState::LevelUp => {
+                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x);
+                // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
+                draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_enemies_collider(&mut enemies);
+                draw_bullets(main_texture, &mut bullets);
 
-        if enemy_cooldown <= 0 {
-            spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
-            enemy_cooldown = max_enemy_cooldown;
-        } else {
-            enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
+                // In-level UI
+                draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
+                set_default_camera();
+
+                level_up_input(&mut level_state);
+                // HP
+                current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
+                draw_rectangle(
+                    90.,
+                    screen_height() - 60., 
+                    ((screen_width() - 90.)*current_player_hp_percentage)/100., 
+                    15., 
+                    RED
+                );
+                // XP
+                current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
+                draw_rectangle(
+                    90.,
+                    screen_height() - 30., 
+                    ((screen_width() - 90.)*current_player_xp_percentage)/100., 
+                    15., 
+                    BLUE
+                );
+                //Player level
+                draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);
+
+                // Level UP UI
+                draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.5));
+                draw_text("LEVEL UP!", screen_width()/2. - 50., 100., 30., WHITE);
+            }
         }
-
-        draw_bullets(main_texture, &mut bullets);
-        update_bullets(&mut bullets, &mut enemies);
-        damage_enemy(&mut bullets, &mut enemies, &mut player_xp);
-        level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level);
-
-        // if bullet_cooldown <= 0 {
-        //     spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-        //     bullet_cooldown = max_cooldown;
-        // } else {
-        //     bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
-        // }
-
-        // Get rid of these entities
-        bullets.retain(|b| b.active);
-        enemies.retain(|e| e.alive);
-
-        set_default_camera();
-
-        // In-level UI
-        draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
-        // HP
-        current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
-        draw_rectangle(
-            90.,
-            screen_height() - 60., 
-            ((screen_width() - 90.)*current_player_hp_percentage)/100., 
-            15., 
-            RED
-        );
-        // XP
-        current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
-        draw_rectangle(
-            90.,
-            screen_height() - 30., 
-            ((screen_width() - 90.)*current_player_xp_percentage)/100., 
-            15., 
-            BLUE
-        );
-        //Player level
-        draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);
 
         next_frame().await;
     }
