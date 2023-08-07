@@ -1,27 +1,42 @@
 use std::time::Duration;
 
 use macroquad::prelude::*;
-use ::rand::Rng;
+
+mod ui;
+mod timer;
+mod upgrade;
+use ui::*;
+use timer::Timer;
+use upgrade::*;
 
 // Spawning enemies
 // - decide where to spawn
 // - spawn 
 // - fix spawning to compensate for bottom UI
+// Taking and dealing damage
 // Scale difficulty
 // - harder to level up
 // - harder enemies
 // - more enemies?
-// Juicing
-// - screen shake
-// - flash enemie on hit
-// - particles?
-// - animate sprites
 // Level up
 // - Change state
 // - Render upgrade choices
-
+// Juicing
+// - screen shake
+// - flash enemie on hit
+// - particles
+// - animate sprites
+// - sound
 // Improve collision
-// Improve 
+// Collision avoidance?
+
+// Upgrade choices
+// - Player Speed
+// - Bullet spawn rate
+// - HP Recovery rate
+// - Companion (1-off)
+
+const PLAYER_SPEED: f32 = 10.;
 
 fn window_conf() -> Conf {
     Conf { 
@@ -65,12 +80,16 @@ fn sprite_rect(ix: u32) -> Rect {
     Rect::new(sx + 1., sy + 1., sw - 2.2, sh - 2.2)
 }
 
-fn draw_player(texture: Texture2D, x: &mut f32, y: &mut f32, flip_x: &bool) {
+fn draw_player(texture: Texture2D, x: &mut f32, y: &mut f32, flip_x: &bool, player_inv_timer: &Timer) {
+    let mut color = WHITE;
+    if player_inv_timer.value() != 1.0 {
+        color = Color::new(1.0, 0., 0., 1.);
+    }
     draw_texture_ex(
         texture, 
         *x,
         *y, 
-        WHITE,
+        color,
 DrawTextureParams { 
             dest_size: Some(vec2(8., 8.)), 
             source: Some(Rect::new(
@@ -139,6 +158,26 @@ fn get_dir(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
 
 fn get_dir_(vec1: Position, vec2: Position) -> f32 {
     return (vec2.x - vec1.x).atan2(vec2.y - vec1.y);
+}
+
+fn update_enemies_colliding(enemies: &mut Vec<Enemies>, x: &f32, y: &f32, hp: &mut f32, player_inv_timer: &mut Timer) {
+    for e in enemies.iter() {
+        let player_pos = Position {
+            x: *x,
+            y: *y
+        };
+        if player_inv_timer.value() == 1.0 {
+            if col(player_pos, e.position, 8.) {
+                println!("colliding with player");
+                damage_player(hp);
+                player_inv_timer.restart();
+            }
+        }
+    }
+}
+
+fn damage_player(hp: &mut f32) {
+    *hp -= 2.;
 }
 
 fn update_enemies_pushing(enemies: &mut Vec<Enemies>) {
@@ -298,8 +337,9 @@ fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &
     // add an enemy to that position
     let direction = rand::gen_range(-1, 2) as f32;
     let random;
-    let mut rng = ::rand::thread_rng();
-    match rng.gen_range(0..=1) {
+    // let mut rng = ::rand::thread_rng();
+
+    match rand::gen_range(0, 2) {
         0 => random = -1.,
         _ => random = 1.,
     }
@@ -327,36 +367,50 @@ fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &
 }
 
 fn level_up_player(player_xp: &mut f32, player_max_xp: &mut f32, mut player_level: &mut i32, state: &mut LevelState) {
-    if player_xp >= player_max_xp {
-        *player_xp = 0.;
-        *player_level += 1;
-        *state = LevelState::LevelUp;
-    }
+    *player_xp = 0.;
+    *player_level += 1;
+    *state = LevelState::LevelUp;
 }
 
-fn level_up_input(state: &mut LevelState) {
+fn level_up_input(state: &mut LevelState) -> Option<LevelState> {
     if is_key_pressed(KeyCode::Space) {
-        *state = LevelState::InGame;
+        return Some(LevelState::InGame)
+    }
+    None
+}
+
+fn choose_upgrade_input(index: &mut i32) {
+    if is_key_pressed(KeyCode::Right) {
+        if *index == 2 {
+            return;
+        } else {
+            *index += 1;
+        }
+    }
+    if is_key_pressed(KeyCode::Left) {
+        if *index == 0 {
+            return;
+        } else {
+            *index -= 1;
+        }
     }
 }
 
-const PLAYER_SPEED: f32 = 10.;
-
-fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool) {
+fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32) {
     let delta = get_frame_time();
     if is_key_down(KeyCode::Left) {
-        *x -= PLAYER_SPEED * delta;
+        *x -= (PLAYER_SPEED * speed) * delta;
         *flip_x = true;
     }
     if is_key_down(KeyCode::Right) {
-        *x += PLAYER_SPEED * delta;
+        *x += (PLAYER_SPEED * speed) * delta;
         *flip_x = false;
     }
     if is_key_down(KeyCode::Up) {
-        *y -= PLAYER_SPEED * delta;
+        *y -= (PLAYER_SPEED * speed) * delta;
     }
     if is_key_down(KeyCode::Down) {
-        *y += PLAYER_SPEED * delta;
+        *y += (PLAYER_SPEED * speed) * delta;
     }
 }
 
@@ -376,19 +430,25 @@ async fn main() {
 
     let main_texture = load_texture("assets/vs-dx-atlas-padded.png").await.unwrap();
     main_texture.set_filter(FilterMode::Nearest);
+    let ui_texture = load_texture("assets/vs-dx-ui-atlas.png").await.unwrap();
+    ui_texture.set_filter(FilterMode::Nearest);
 
+    // Player attributes
     let mut player_pos_x = 64.;
     let mut player_pos_y = 64.;
     let player_max_hp = 100.;
-    let mut player_hp = player_max_hp;
+    let mut player_hp : f32 = player_max_hp;
     let mut current_player_hp_percentage; 
-
     let mut player_max_xp = 100.;
     let mut player_xp = 1.;
     let mut player_level = 1;
-    let mut current_player_xp_percentage;     
-
+    let mut current_player_xp_percentage;
     let mut player_flip_x: bool = false;
+    let mut player_speed_bonus = 1.;
+    let mut player_inv_timer = Timer::new(1800);
+
+    // Level up UI definitions
+    let mut choosen_upgrade_index = 0;
 
     let mut enemies: Vec<Enemies> = Vec::new();
     let mut bullets: Vec<Bullet> = Vec::new();
@@ -399,6 +459,8 @@ async fn main() {
     let mut enemy_cooldown = max_enemy_cooldown;
 
     let mut level_state = LevelState::LevelUp;
+
+    let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -422,13 +484,18 @@ async fn main() {
 
         match level_state {
             LevelState::InGame => {
-                move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x);
+                // Update when not leveling up!
+                move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus);
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
                 update_enemies_pushing(&mut enemies);
-                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x);
-                // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
+                update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer);
+
+                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-                draw_enemies_collider(&mut enemies);
+                // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
+                // draw_enemies_collider(&mut enemies);
+
+                // Spawning code
                 if enemy_cooldown <= 0 {
                     spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
                     enemy_cooldown = max_enemy_cooldown;
@@ -438,14 +505,17 @@ async fn main() {
                 draw_bullets(main_texture, &mut bullets);
                 update_bullets(&mut bullets, &mut enemies);
                 damage_enemy(&mut bullets, &mut enemies, &mut player_xp);
-                level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level, &mut level_state);
-        
-                if bullet_cooldown <= 0 {
-                    spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-                    bullet_cooldown = max_cooldown;
-                } else {
-                    bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+                if player_xp >= player_max_xp {
+                    upgrades = pick_random_upgrades();
+                    level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level, &mut level_state);
                 }
+                
+                // if bullet_cooldown <= 0 {
+                //     spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                //     bullet_cooldown = max_cooldown;
+                // } else {
+                //     bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+                // }
         
                 // Get rid of things that shouldn't be around anymore
                 // Bullets, enemies, particles, pop-ups
@@ -454,31 +524,12 @@ async fn main() {
 
                 set_default_camera();
 
-                // In-level UI
-                draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
-                // HP
                 current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
-                draw_rectangle(
-                    90.,
-                    screen_height() - 60., 
-                    ((screen_width() - 90.)*current_player_hp_percentage)/100., 
-                    15., 
-                    RED
-                );
-                // XP
                 current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
-                draw_rectangle(
-                    90.,
-                    screen_height() - 30., 
-                    ((screen_width() - 90.)*current_player_xp_percentage)/100., 
-                    15., 
-                    BLUE
-                );
-                //Player level
-                draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);                
+                draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
             },
             LevelState::LevelUp => {
-                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x);
+                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
                 draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
                 draw_enemies_collider(&mut enemies);
@@ -488,31 +539,22 @@ async fn main() {
                 draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
                 set_default_camera();
 
-                level_up_input(&mut level_state);
-                // HP
-                current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
-                draw_rectangle(
-                    90.,
-                    screen_height() - 60., 
-                    ((screen_width() - 90.)*current_player_hp_percentage)/100., 
-                    15., 
-                    RED
-                );
-                // XP
-                current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
-                draw_rectangle(
-                    90.,
-                    screen_height() - 30., 
-                    ((screen_width() - 90.)*current_player_xp_percentage)/100., 
-                    15., 
-                    BLUE
-                );
-                //Player level
-                draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);
+                choose_upgrade_input(&mut choosen_upgrade_index);
+                let result = level_up_input(&mut level_state);
+                if let Some(newstate) = result {
+                    // fine tune!
+                    match choosen_upgrade_index {
+                        _ => {
+                            player_speed_bonus += 0.1;
+                        }
+                    }
+                    level_state = newstate;
+                }
 
-                // Level UP UI
-                draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.5));
-                draw_text("LEVEL UP!", screen_width()/2. - 50., 100., 30., WHITE);
+                current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
+                current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
+                draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
+                draw_level_up(&choosen_upgrade_index, &upgrades);            
             }
         }
 
