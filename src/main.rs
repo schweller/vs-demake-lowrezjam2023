@@ -1,5 +1,5 @@
 use std::time::Duration;
-use keyframe::{Keyframe, functions::EaseOut};
+use keyframe::{Keyframe, functions::{EaseOut, EaseInOut}};
 use macroquad::prelude::*;
 
 mod ui;
@@ -7,11 +7,13 @@ mod timer;
 mod upgrade;
 mod tween;
 mod enemies;
+mod damage_popup;
 use tween::Tween;
 use ui::*;
 use timer::Timer;
 use upgrade::*;
 use enemies::*;
+use damage_popup::*;
 
 // Spawning enemies
 // - decide where to spawn
@@ -251,108 +253,14 @@ fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp
     }
 }
 
-fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32) {
+fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &mut Vec<Enemies>) {
     for e in enemies.iter_mut() {
         if e.hp <= 0. { 
-            e.alive = false; 
+            e.alive = false;
             *player_xp += 40.;
+            dead_enemies.push(Enemies::new(e.position.x, e.position.y));
         }
     }
-}
-
-struct DamagePopup {
-    pos: Position,
-    tween: Tween,
-    opacity_tween: Tween,
-    active: bool
-}
-
-impl DamagePopup {
-    fn new(x: f32, y: f32) -> Self {
-        let opacity_tween = Tween::from_keyframes(
-            vec![
-                Keyframe::new(1.0, 0.0, EaseOut),
-                Keyframe::new(0.0, 1.0, EaseOut),
-            ],
-            0,
-            1,
-            false,
-        );
-        let tween = Tween::from_keyframes(
-            vec![
-                Keyframe::new(0.0, 0.0, EaseOut),
-                Keyframe::new(5.0, 0.2, EaseOut),
-            ],
-            0,
-            1,
-            false,
-        );
-        DamagePopup { pos: Position { x, y }, tween, opacity_tween, active: true }
-    }
-
-    fn update(&mut self) {
-        self.tween.update();
-        self.opacity_tween.update();
-        if self.tween.finished() {
-            self.active = false;
-        }
-    }
-
-    fn draw(&self, texture: Texture2D) {
-        if self.active {
-            draw_texture_ex(
-                texture, 
-                self.pos.x - 2., 
-                (self.pos.y) - self.tween.value(), 
-                Color::new(1., 1., 0., 0.5 * self.opacity_tween.value()), 
-                DrawTextureParams { 
-                    dest_size: Some(vec2(6., 4.)),
-                    source: Some(Rect::new(
-                        0.,
-                        8.,
-                        6.,
-                        4.,
-                    )),
-                    ..Default::default()
-                }
-            );
-        }
-    }
-}
-
-fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &f32) {
-    // get a random position away from the player
-    // add an enemy to that position
-    let direction = rand::gen_range(-1, 2) as f32;
-    let random;
-    // let mut rng = ::rand::thread_rng();
-
-    match rand::gen_range(0, 2) {
-        0 => random = -1.,
-        _ => random = 1.,
-    }
-
-    let _rad = 72. + (rand::gen_range(0., 33.) as f32).floor();
-    let x = player_pos_x + direction.cos() * _rad * random;
-    let y = player_pos_y + direction.sin() * _rad * random;
-
-    enemies.push(
-        Enemies {
-            position: Position {
-                x,
-                y,
-            },
-            collider: Collider { 
-                x: 72.,
-                y: 90.,
-                width: 8, 
-                height: 8,
-                radius: 4. 
-            },
-            hp: 2.,
-            alive: true,
-        }
-    );
 }
 
 fn level_up_player(player_xp: &mut f32, player_max_xp: &mut f32, mut player_level: &mut i32, state: &mut LevelState) {
@@ -427,6 +335,24 @@ enum LevelState {
     InGame
 }
 
+fn get_minutes_from_millis(elapsed_time: u128) -> String {
+    let mins = (elapsed_time/1000)/60;
+    if mins < 10 {
+        return "0".to_string() + &mins.to_string();
+    } else {
+        mins.to_string()
+    }
+}
+
+fn get_seconds_from_millis(elapsed_time: u128) -> String {
+    let secs = (elapsed_time/1000)%60;
+    if secs < 10 {
+        return "0".to_string() + &secs.to_string();
+    } else {
+        secs.to_string()
+    }
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     let min_camera_zoom = 1.3;
@@ -463,13 +389,14 @@ async fn main() {
     // Enemies & Bullets
     let mut enemies: Vec<Enemies> = Vec::new();
     let mut bullets: Vec<Bullet> = Vec::new();
+    let mut dead_enemies: Vec<Enemies> = Vec::new();
     let max_cooldown = Duration::from_secs(15).as_millis();
     let mut bullet_cooldown = max_cooldown;
 
     let max_enemy_cooldown = Duration::from_secs(8).as_millis();
     let mut enemy_cooldown = max_enemy_cooldown;
 
-    let mut level_state = LevelState::LevelUp;
+    let mut level_state = LevelState::InGame;
 
     // let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
     let mut upgrades: Vec<Box<dyn Upgrade>> = pick_random_upgrades();
@@ -487,6 +414,7 @@ async fn main() {
     );
 
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
+    let mut sw = stopwatch_rs::StopWatch::start();
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -511,14 +439,22 @@ async fn main() {
         match level_state {
             LevelState::InGame => {
                 choosen_upgrade_index = 0;
-                // Update when not leveling up!
+                println!("mins {}", (get_minutes_from_millis(sw.split().split.as_millis())));
+                println!("secs {}", (get_seconds_from_millis(sw.split().split.as_millis())));
+
                 move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus);
+                
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
                 update_enemies_pushing(&mut enemies);
                 update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer);
+                update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
+                update_bullets(&mut bullets, &mut enemies);
 
                 draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_dead_enemies(main_texture, &mut dead_enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_bullets(main_texture, &mut bullets);
+
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
                 // draw_enemies_collider(&mut enemies);
 
@@ -534,10 +470,10 @@ async fn main() {
                 } else {
                     enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
                 }
-                draw_bullets(main_texture, &mut bullets);
-                update_bullets(&mut bullets, &mut enemies);
+
                 damage_enemy(&mut bullets, &mut enemies, &mut player_xp, &mut damage_popups);
-                kill_enemies(&mut enemies, &mut player_xp);
+                kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
+
                 if player_xp >= player_max_xp {
                     upgrades = pick_random_upgrades();
                     level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level, &mut level_state);
@@ -554,7 +490,8 @@ async fn main() {
                 // Bullets, enemies, particles, pop-ups
                 bullets.retain(|b| b.active);
                 enemies.retain(|e| e.alive);
-                damage_popups.retain(|e| e.active);                
+                dead_enemies.retain(|e| e.alive);
+                damage_popups.retain(|e| e.active);          
 
                 set_default_camera();
 
@@ -563,6 +500,7 @@ async fn main() {
                 draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
             },
             LevelState::LevelUp => {
+                sw.suspend();
                 draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
                 draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
@@ -592,6 +530,7 @@ async fn main() {
                         }
                         _ => {}
                     }
+                    sw.resume();
                     level_state = newstate;
                 }
 

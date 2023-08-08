@@ -13,3 +13,4 @@ macroquad-particles = { version = "0.1.2" }
 instant = { version = "0.1", features = [ "inaccurate" ] }
 keyframe = { version = "1.1" }
 keyframe_derive = { version = "1.0" }
+stopwatch-rs = "0.1.0"

@@ -5,6 +5,7 @@ pub use keyframe_derive::*;
 
 use crate::Timer;
 
+#[derive(Clone)]
 pub struct Tween {
     timer: Timer,
     sequence: Option<AnimationSequence<f32>>,

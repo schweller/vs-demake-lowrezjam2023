@@ -3,7 +3,7 @@ use std::ops::Sub;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Timer{
-	duration: Duration,
+	pub duration: Duration,
 	start_time: instant::Instant,
 }
 
@@ -37,6 +37,12 @@ impl Timer{
 
 	pub fn restart(&mut self){
 		self.start_time = instant::Instant::now();
+	}
+
+	pub fn elapsed(&self) -> Duration {
+		let current_time = instant::Instant::now();
+		let elapsed = current_time - self.start_time;
+		elapsed	
 	}
 
 	pub fn value(&self)-> f32{
