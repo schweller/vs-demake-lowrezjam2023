@@ -1,32 +1,41 @@
 use std::time::Duration;
-
+use keyframe::{Keyframe, functions::EaseOut};
 use macroquad::prelude::*;
 
 mod ui;
 mod timer;
 mod upgrade;
+mod tween;
+mod enemies;
+use tween::Tween;
 use ui::*;
 use timer::Timer;
 use upgrade::*;
+use enemies::*;
 
 // Spawning enemies
 // - decide where to spawn
 // - spawn 
-// - fix spawning to compensate for bottom UI
-// Taking and dealing damage
+// - fix spawning to compensate for bottom UI - prob not being able to done
+
+// Taking and dealing damage - done but needs refinement
+
 // Scale difficulty
 // - harder to level up
 // - harder enemies
 // - more enemies?
+
 // Level up
-// - Change state
-// - Render upgrade choices
+// - Change state - done
+// - Render upgrade choices - done
+
 // Juicing
 // - screen shake
 // - flash enemie on hit
 // - particles
 // - animate sprites
 // - sound
+
 // Improve collision
 // Collision avoidance?
 
@@ -40,20 +49,16 @@ const PLAYER_SPEED: f32 = 10.;
 
 fn window_conf() -> Conf {
     Conf { 
-        window_title: "Rustlike".to_owned(), 
+        window_title: "LowRezJam 2023".to_owned(), 
         window_width: 640, // 640 + 120 
         window_height: 640, // 320 + 120
-        high_dpi: true,
+        high_dpi: false,
+        window_resizable: false,
+        sample_count: 10,
         ..Default::default()
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Enemies {
-    pub position: Position,
-    pub collider: Collider,
-    pub alive: bool
-}
 
 #[derive(Clone, Copy)]
 pub struct Position {
@@ -112,20 +117,7 @@ fn draw_player_collider(x: &mut f32, y: &mut f32) {
     );
 }
 
-fn update_enemies_position(enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut f32) {
-    let delta = get_frame_time();
-    let player_vec: Vec2 = Vec2::new(*x, *y);
-
-    for e in enemies.iter_mut() {
-        // x.atan2(other);
-        let enem_vec = Vec2::new(e.position.x, e.position.y);
-        let dir = enem_vec - player_vec;
-        e.position.x -= dir.x * delta * 0.1; 
-        e.position.y -= dir.y * delta * 0.1;
-    }
-}
-
-fn col(a: Position, b: Position, r: f32) -> bool {
+pub fn col(a: Position, b: Position, r: f32) -> bool {
     let x = (b.x - a.x).abs();
     if x > r {
         return false
@@ -137,7 +129,7 @@ fn col(a: Position, b: Position, r: f32) -> bool {
     return (x*x+y+y)<r*r
 }
 
-fn dist(a: Position, b: Position, r: f32) -> f32 {
+pub fn dist(a: Position, b: Position, r: f32) -> f32 {
     let x = (a.x - b.x).abs();
     let y = (a.y - b.y).abs();
     if x+y < r*1.5 {
@@ -156,83 +148,8 @@ fn get_dir(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
     return (x2 - x1).atan2(y2 - y1);
 }
 
-fn get_dir_(vec1: Position, vec2: Position) -> f32 {
+pub fn get_dir_(vec1: Position, vec2: Position) -> f32 {
     return (vec2.x - vec1.x).atan2(vec2.y - vec1.y);
-}
-
-fn update_enemies_colliding(enemies: &mut Vec<Enemies>, x: &f32, y: &f32, hp: &mut f32, player_inv_timer: &mut Timer) {
-    for e in enemies.iter() {
-        let player_pos = Position {
-            x: *x,
-            y: *y
-        };
-        if player_inv_timer.value() == 1.0 {
-            if col(player_pos, e.position, 8.) {
-                println!("colliding with player");
-                damage_player(hp);
-                player_inv_timer.restart();
-            }
-        }
-    }
-}
-
-fn damage_player(hp: &mut f32) {
-    *hp -= 2.;
-}
-
-fn update_enemies_pushing(enemies: &mut Vec<Enemies>) {
-    if enemies.len() > 0 {
-        for i in 0..enemies.len() - 1 {
-            for j in i+1..enemies.len() {
-                // let r = enemies[i].collider.radius + enemies[j].collider.radius;
-                let r = 8.;
-                if col(enemies[i].position, enemies[j].position, r) {
-                    // println!("enemies colliding!");
-                    let dist = dist(enemies[i].position, enemies[j].position, 10.);
-                    let dir = get_dir_(enemies[i].position, enemies[j].position);
-                    let dif = r - dist;
-                    enemies[i].position.x += dir.cos()*dif;
-                    enemies[i].position.y += dir.sin()*dif;
-                }
-            }
-        }
-    }
-}
-
-fn draw_enemies(texture: Texture2D, enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut f32) {
-    for e in enemies.iter() {
-        let mut flip = false;
-        if e.position.x > *x {
-            flip = true
-        }
-        draw_texture_ex(
-            texture, 
-            e.position.x,
-            e.position.y,
-            WHITE,
-    DrawTextureParams { 
-                dest_size: Some(vec2(8., 8.)), 
-                source: Some(Rect::new(
-                    20.,
-                    2.,
-                    8.,
-                    8.,
-                )),
-                flip_x: flip,
-            ..Default::default()
-        });
-    } 
-}
-
-fn draw_enemies_collider(enemies: &mut Vec<Enemies>) {
-    for e in enemies.iter() {
-        draw_circle(
-            e.position.x + 4., 
-            e.position.y + 4., 
-            e.collider.radius, 
-            Color::from_rgba(255, 0, 0, 60)
-        );
-    }
 }
 
 fn draw_map_cell(texture: Texture2D, x: i32, y: i32) {
@@ -293,7 +210,7 @@ fn spawn_bullet(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, x: &mut f
                 // let foo = na::Vector2::new(*x, *y);
                 // let bar = na::Vector2::new(e.position.x, e.position.y);
                 // _dir = foo.sub(bar).norm();
-                println!("{}", _dir);
+                // println!("{}", _dir);
                 _dir = Vec2::new(*x, *y) - Vec2::new(e.position.x, e.position.y);
                 if let Some(d) = _dir.try_normalize() {
                     _dir = d;
@@ -315,7 +232,7 @@ fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
     }
 }
 
-fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp: &mut f32) {
+fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp: &mut f32, dmg_pop: &mut Vec<DamagePopup>) {
     for e in enemies.iter_mut() {
         for bullet in bullets.iter_mut() {
             // Collide with enemies
@@ -324,10 +241,81 @@ fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp
                 Position { x: e.position.x + 2., y: e.position.y + 2. }, 
                 5.
             ) {
-                e.alive = false;
-                bullet.active = false;
-                *player_xp += 40.;
+                if e.hp > 0. {
+                    bullet.active = false;
+                    dmg_pop.push(DamagePopup::new(e.position.x, e.position.y));
+                    e.hp -= 1.;
+                }
             }
+        }
+    }
+}
+
+fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32) {
+    for e in enemies.iter_mut() {
+        if e.hp <= 0. { 
+            e.alive = false; 
+            *player_xp += 40.;
+        }
+    }
+}
+
+struct DamagePopup {
+    pos: Position,
+    tween: Tween,
+    opacity_tween: Tween,
+    active: bool
+}
+
+impl DamagePopup {
+    fn new(x: f32, y: f32) -> Self {
+        let opacity_tween = Tween::from_keyframes(
+            vec![
+                Keyframe::new(1.0, 0.0, EaseOut),
+                Keyframe::new(0.0, 1.0, EaseOut),
+            ],
+            0,
+            1,
+            false,
+        );
+        let tween = Tween::from_keyframes(
+            vec![
+                Keyframe::new(0.0, 0.0, EaseOut),
+                Keyframe::new(5.0, 0.2, EaseOut),
+            ],
+            0,
+            1,
+            false,
+        );
+        DamagePopup { pos: Position { x, y }, tween, opacity_tween, active: true }
+    }
+
+    fn update(&mut self) {
+        self.tween.update();
+        self.opacity_tween.update();
+        if self.tween.finished() {
+            self.active = false;
+        }
+    }
+
+    fn draw(&self, texture: Texture2D) {
+        if self.active {
+            draw_texture_ex(
+                texture, 
+                self.pos.x - 2., 
+                (self.pos.y) - self.tween.value(), 
+                Color::new(1., 1., 0., 0.5 * self.opacity_tween.value()), 
+                DrawTextureParams { 
+                    dest_size: Some(vec2(6., 4.)),
+                    source: Some(Rect::new(
+                        0.,
+                        8.,
+                        6.,
+                        4.,
+                    )),
+                    ..Default::default()
+                }
+            );
         }
     }
 }
@@ -361,7 +349,8 @@ fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &
                 height: 8,
                 radius: 4. 
             },
-            alive: true
+            hp: 2.,
+            alive: true,
         }
     );
 }
@@ -379,12 +368,13 @@ fn level_up_input(state: &mut LevelState) -> Option<LevelState> {
     None
 }
 
-fn choose_upgrade_input(index: &mut i32) {
+fn choose_upgrade_input(index: &mut i32, tween: &mut Tween) {
     if is_key_pressed(KeyCode::Right) {
         if *index == 2 {
             return;
         } else {
             *index += 1;
+            tween.restart();
         }
     }
     if is_key_pressed(KeyCode::Left) {
@@ -392,26 +382,44 @@ fn choose_upgrade_input(index: &mut i32) {
             return;
         } else {
             *index -= 1;
+            tween.restart();
         }
     }
 }
 
+pub fn axis(negative: bool, positive: bool) -> f32 {
+    ((positive as i8) - (negative as i8)) as f32
+}
+
 fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32) {
     let delta = get_frame_time();
-    if is_key_down(KeyCode::Left) {
-        *x -= (PLAYER_SPEED * speed) * delta;
-        *flip_x = true;
+    let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
+    let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
+    let magnitude = (a.powi(2) + b.powi(2)).sqrt();
+    let foo_x = a / magnitude;
+    let foo_y = b / magnitude;
+    if a != 0. || b != 0. {
+        *x += foo_x * delta * PLAYER_SPEED * speed;
+        *y -= foo_y * delta * PLAYER_SPEED * speed;
     }
-    if is_key_down(KeyCode::Right) {
-        *x += (PLAYER_SPEED * speed) * delta;
-        *flip_x = false;
-    }
-    if is_key_down(KeyCode::Up) {
-        *y -= (PLAYER_SPEED * speed) * delta;
-    }
-    if is_key_down(KeyCode::Down) {
-        *y += (PLAYER_SPEED * speed) * delta;
-    }
+
+    if a == -1. { *flip_x = true }
+    if a == 1. { *flip_x = false }
+
+    // if is_key_down(KeyCode::Left) {
+    //     *x -= (PLAYER_SPEED * speed) * delta;
+    //     *flip_x = true;
+    // }
+    // if is_key_down(KeyCode::Right) {
+    //     *x += (PLAYER_SPEED * speed) * delta;
+    //     *flip_x = false;
+    // }
+    // if is_key_down(KeyCode::Up) {
+    //     *y -= (PLAYER_SPEED * speed) * delta;
+    // }
+    // if is_key_down(KeyCode::Down) {
+    //     *y += (PLAYER_SPEED * speed) * delta;
+    // }
 }
 
 enum LevelState {
@@ -432,8 +440,10 @@ async fn main() {
     main_texture.set_filter(FilterMode::Nearest);
     let ui_texture = load_texture("assets/vs-dx-ui-atlas.png").await.unwrap();
     ui_texture.set_filter(FilterMode::Nearest);
+    let upgrade_texture = load_texture("assets/vs-dx-upgrades-atlas.png").await.unwrap();
+    upgrade_texture.set_filter(FilterMode::Nearest);
 
-    // Player attributes
+    // Player definitions
     let mut player_pos_x = 64.;
     let mut player_pos_y = 64.;
     let player_max_hp = 100.;
@@ -450,6 +460,7 @@ async fn main() {
     // Level up UI definitions
     let mut choosen_upgrade_index = 0;
 
+    // Enemies & Bullets
     let mut enemies: Vec<Enemies> = Vec::new();
     let mut bullets: Vec<Bullet> = Vec::new();
     let max_cooldown = Duration::from_secs(15).as_millis();
@@ -460,7 +471,22 @@ async fn main() {
 
     let mut level_state = LevelState::LevelUp;
 
-    let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
+    // let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
+    let mut upgrades: Vec<Box<dyn Upgrade>> = pick_random_upgrades();
+
+    // Tween for upgrade
+    let mut upgrade_menu_tween = Tween::from_keyframes(
+        vec![
+            Keyframe::new(0.0, 0.0, EaseOut),
+            Keyframe::new(4.0, 0.5, EaseOut),
+            Keyframe::new(0.0, 1.0, EaseOut),
+        ],
+        0,
+        1,
+        true,
+    );
+
+    let mut damage_popups : Vec<DamagePopup> = Vec::new();
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -484,6 +510,7 @@ async fn main() {
 
         match level_state {
             LevelState::InGame => {
+                choosen_upgrade_index = 0;
                 // Update when not leveling up!
                 move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus);
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
@@ -495,6 +522,11 @@ async fn main() {
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
                 // draw_enemies_collider(&mut enemies);
 
+                for popup in damage_popups.iter_mut() {
+                    popup.update();
+                    popup.draw(ui_texture);
+                }
+
                 // Spawning code
                 if enemy_cooldown <= 0 {
                     spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
@@ -504,23 +536,25 @@ async fn main() {
                 }
                 draw_bullets(main_texture, &mut bullets);
                 update_bullets(&mut bullets, &mut enemies);
-                damage_enemy(&mut bullets, &mut enemies, &mut player_xp);
+                damage_enemy(&mut bullets, &mut enemies, &mut player_xp, &mut damage_popups);
+                kill_enemies(&mut enemies, &mut player_xp);
                 if player_xp >= player_max_xp {
                     upgrades = pick_random_upgrades();
                     level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level, &mut level_state);
                 }
                 
-                // if bullet_cooldown <= 0 {
-                //     spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-                //     bullet_cooldown = max_cooldown;
-                // } else {
-                //     bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
-                // }
+                if bullet_cooldown <= 0 {
+                    spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                    bullet_cooldown = max_cooldown;
+                } else {
+                    bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+                }
         
                 // Get rid of things that shouldn't be around anymore
                 // Bullets, enemies, particles, pop-ups
                 bullets.retain(|b| b.active);
                 enemies.retain(|e| e.alive);
+                damage_popups.retain(|e| e.active);                
 
                 set_default_camera();
 
@@ -539,14 +573,24 @@ async fn main() {
                 draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
                 set_default_camera();
 
-                choose_upgrade_input(&mut choosen_upgrade_index);
+                choose_upgrade_input(&mut choosen_upgrade_index, &mut upgrade_menu_tween);
                 let result = level_up_input(&mut level_state);
                 if let Some(newstate) = result {
                     // fine tune!
-                    match choosen_upgrade_index {
-                        _ => {
+                    let idx = choosen_upgrade_index as usize;
+                    let upg = upgrades[idx].get_name();
+                    match upg {
+                        "Speed" => {
+                            println!("Speed upgrade");
                             player_speed_bonus += 0.1;
                         }
+                        "FireRate" => {
+                            println!("FireRate upgrade");
+                        }
+                        "Recovery" => {
+                            println!("Recovery upgrade");
+                        }
+                        _ => {}
                     }
                     level_state = newstate;
                 }
@@ -554,7 +598,7 @@ async fn main() {
                 current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
                 current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
                 draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
-                draw_level_up(&choosen_upgrade_index, &upgrades);            
+                draw_level_up(&choosen_upgrade_index, &upgrades, upgrade_texture, &mut upgrade_menu_tween);            
             }
         }
 

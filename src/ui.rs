@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
 
-use crate::{timer::Timer, Upgrade};
+use crate::{timer::Timer, Upgrade, tween::Tween};
 
 pub fn draw_level_ui(
     texture: Texture2D,
@@ -70,34 +70,30 @@ pub fn draw_level_ui(
 
 pub fn draw_level_up(
     choosen_upgrade_index: &i32,
-    ll: &Vec<Box<dyn Upgrade>>
+    available_upgrades: &Vec<Box<dyn Upgrade>>,
+    upgrade_texture: Texture2D,
+    tween: &mut Tween
 ) {
     // Level UP UI
+    tween.update();
     draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.5));
     draw_text("LEVEL UP!", screen_width()/2. - 50., 100., 30., WHITE);
-
-    // Choices
-    // draw three rectangles
-    // input chooses between index
-    // highlight indexed rectangle
-
-    for i in 0..3 {
+    for (i, upgrade) in available_upgrades.iter().enumerate() {
         let f = i as f32;
-        let start = 10.;
-        let total_spacing = 40.; // It will be the amount of upgrade available
-        let upgrade_w = (screen_width() - total_spacing) / 3.;
-        let upgrade_h = screen_height() / 3.;
-        let x_pos = start + f * (upgrade_w + 10.);
-        let mut color = Color::new(0., 255., 0., 1.);
-        if *choosen_upgrade_index == i {
-            color = Color::new(255., 0., 0., 1.);
+        let start = 70.;
+        // let total_spacing = 40.; // It will be the amount of upgrade available
+        // let upgrade_w = (screen_width() - total_spacing) / 3.;
+        let upgrade_h = 160.;
+        let mut x_pos = (screen_width() / 2.) - 245.;
+        if *choosen_upgrade_index == (i as i32) {
+            x_pos -= 50. + tween.value();
         }
-        draw_rectangle(
+        let y_pos = start + f * (upgrade_h + 10.);
+        upgrade.render(
+            upgrade_texture, 
             x_pos,
-            screen_height() / 2. - ((screen_height() / 3.) / 2.), 
-            upgrade_w, 
-            upgrade_h, 
-            color
+            y_pos, 
+            *choosen_upgrade_index == (i as i32)
         );
     }
 }
