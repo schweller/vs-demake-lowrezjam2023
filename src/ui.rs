@@ -68,6 +68,21 @@ pub fn draw_level_ui(
     // draw_text(format!("Inv {}", player_inv_timer.value()).as_str(), 10., 80., 50., WHITE);
 }
 
+pub fn draw_level_timer_ui(
+    font: Font,
+    mins: String,
+    secs: String,
+) {
+    draw_text_ex(mins.as_str(), ((screen_width() / 2.) - 80.), 50., 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
+    draw_text_ex(
+        &(":".to_owned() + secs.as_str()), 
+        ((screen_width() / 2.) - 80.) + 80., 50., 
+    TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+)
+}
+
 pub fn draw_level_up(
     choosen_upgrade_index: &i32,
     available_upgrades: &Vec<Box<dyn Upgrade>>,

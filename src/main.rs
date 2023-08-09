@@ -368,6 +368,7 @@ async fn main() {
     ui_texture.set_filter(FilterMode::Nearest);
     let upgrade_texture = load_texture("assets/vs-dx-upgrades-atlas.png").await.unwrap();
     upgrade_texture.set_filter(FilterMode::Nearest);
+    let font = load_ttf_font("assets/smolFontMono.ttf").await.unwrap();
 
     // Player definitions
     let mut player_pos_x = 64.;
@@ -498,6 +499,7 @@ async fn main() {
                 current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
                 current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
                 draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
+                draw_level_timer_ui(font, get_minutes_from_millis(sw.split().split.as_millis()), (get_seconds_from_millis(sw.split().split.as_millis())));
             },
             LevelState::LevelUp => {
                 sw.suspend();
