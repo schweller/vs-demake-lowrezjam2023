@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use tween::{Looper, Tweener, SineInOut, BounceInOut, Oscillator};
 
 use crate::{timer::Timer, Upgrade, tween::Tween};
 
@@ -73,7 +74,7 @@ pub fn draw_level_timer_ui(
     mins: String,
     secs: String,
 ) {
-    draw_text_ex(mins.as_str(), ((screen_width() / 2.) - 80.), 50., 
+    draw_text_ex(mins.as_str(), (screen_width() / 2.) - 80., 50., 
         TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
     );
     draw_text_ex(
@@ -81,6 +82,20 @@ pub fn draw_level_timer_ui(
         ((screen_width() / 2.) - 80.) + 80., 50., 
     TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
 )
+}
+
+pub fn draw_level_up_title(
+    font: Font,
+    tween: &mut Oscillator<Tweener<f32, f32, SineInOut>>
+) {
+    const DT: f32 = 1.0 / 60.0;
+    println!("{}", tween.0.move_by(0.1));
+    draw_text_ex(
+        "LEVEL UP!",
+        (screen_width() / 2.) - 150., 
+        50. + tween.0.tween.tween(DT, 100.), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
 }
 
 pub fn draw_level_up(
