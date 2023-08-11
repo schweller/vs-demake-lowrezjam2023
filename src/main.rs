@@ -1,5 +1,5 @@
-use std::{time::Duration, ops::{Sub, Add}, cmp::min};
-use keyframe::{Keyframe, functions::{EaseOut, EaseInOut, EaseIn}};
+use std::{time::Duration, collections::HashMap};
+use keyframe::{Keyframe, functions::EaseOut};
 use macroquad::prelude::*;
 
 mod ui;
@@ -8,14 +8,16 @@ mod upgrade;
 mod tween;
 mod enemies;
 mod damage_popup;
+mod animation;
 use crate::tween::Tween;
 use ui::*;
 use timer::Timer;
 use upgrade::*;
 use enemies::*;
 use damage_popup::*;
+use animation::Animation;
 
-use ::tween::{Tweener, TweenValue, Tween as OtherTween, TweenTime, Looper, Oscillator, SineInOut, CircInOut};
+use ::tween::{Tweener, Oscillator, CircInOut};
 
 // Core game loop
 // Start level 1
@@ -97,7 +99,7 @@ fn sprite_rect(ix: u32) -> Rect {
     Rect::new(sx + 1., sy + 1., sw - 2.2, sh - 2.2)
 }
 
-fn draw_player(texture: Texture2D, x: &mut f32, y: &mut f32, flip_x: &bool, player_inv_timer: &Timer) {
+fn draw_player(texture: Texture2D, frame: Option<Rect>, x: &mut f32, y: &mut f32, flip_x: &bool, player_inv_timer: &Timer) {
     let mut color = WHITE;
     if player_inv_timer.value() != 1.0 {
         color = Color::new(1.0, 0., 0., 1.);
@@ -109,12 +111,7 @@ fn draw_player(texture: Texture2D, x: &mut f32, y: &mut f32, flip_x: &bool, play
         color,
 DrawTextureParams { 
             dest_size: Some(vec2(8., 8.)), 
-            source: Some(Rect::new(
-                10.,
-                2.,
-                8.,
-                8.,
-            )),
+            source: frame,
             flip_x: *flip_x,
         ..Default::default()
     })
@@ -346,22 +343,6 @@ fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32) {
     // }
 }
 
-// fn dash_player(x: &mut f32, y: &mut f32, is_dashing: &bool) {
-//     if *is_dashing {
-//         let delta = get_frame_time();
-//         let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
-//         let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
-//         let magnitude = (a.powi(2) + b.powi(2)).sqrt();
-//         let foo_x = a / magnitude;
-//         let foo_y = b / magnitude;
-//         if a != 0. || b != 0. {
-//             *x += a * delta * PLAYER_SPEED + (*x * 0.125 * delta)*3.;
-//             *y -= b * delta * PLAYER_SPEED + (*y * 0.125 * delta)*3.;
-//         }
-//         // *x += delta * PLAYER_SPEED + (*x * 0.125 * delta)*3.;
-//     }
-// }
-
 enum LevelState {
     LevelUp,
     InGame,
@@ -405,6 +386,8 @@ async fn main() {
     upgrade_texture.set_filter(FilterMode::Nearest);
     let font = load_ttf_font("assets/smolFontMono.ttf").await.unwrap();
     font.set_filter(FilterMode::Nearest);
+    let player_texture = load_texture("assets/vs-dx-player-atlas.png").await.unwrap();
+    player_texture.set_filter(FilterMode::Nearest);
 
     // Player definitions
     let mut player_pos_x = 64.;
@@ -420,6 +403,26 @@ async fn main() {
     let mut player_speed_bonus = 1.;
     let mut player_inv_timer = Timer::new(1800);
     let player_damage = 2.;
+
+    let mut idle_state_rects : Vec<Rect> = Vec::new();
+    idle_state_rects.push(Rect::new(1., 1., 9., 9.));
+    idle_state_rects.push(Rect::new(10., 1., 9., 9.));
+    idle_state_rects.push(Rect::new(19., 1., 9., 9.));
+    idle_state_rects.push(Rect::new(28., 1., 9., 9.));
+
+    let idle_state_frame_lenghts : Vec<Duration> = vec![Duration::from_millis(200); idle_state_rects.len()];
+
+    let idle_animation = Animation {
+        frames: idle_state_rects.clone(),
+        frame_length: idle_state_frame_lenghts.clone(),
+        anim_duration: Duration::from_secs(0),
+        current_frame: 0,
+        current_frame_length: idle_state_frame_lenghts[0],
+        repeating: true
+    };
+
+    let mut anims = HashMap::new();
+    anims.insert("idle".to_string(), idle_animation);
 
     // Level up UI definitions
     let mut choosen_upgrade_index = 0;
@@ -476,6 +479,7 @@ async fn main() {
         // still not sure here
         request_new_screen_size(320., 320.);
         // println!("screen")
+
         set_camera(&Camera2D {
             target: vec2(camera_focal_x + 4., camera_focal_y + 4.),
             zoom: Vec2::new(
@@ -503,7 +507,16 @@ async fn main() {
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
                 update_bullets(&mut bullets, &mut enemies);
 
-                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
+                let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
+
+                draw_player(
+                    player_texture,
+                    frame, 
+                    &mut player_pos_x, 
+                    &mut player_pos_y, 
+                    &player_flip_x, 
+                    &player_inv_timer
+                );
                 draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
                 draw_dead_enemies(main_texture, &mut dead_enemies, &mut player_pos_x, &mut player_pos_y);
                 draw_bullets(main_texture, &mut bullets);
@@ -584,7 +597,8 @@ async fn main() {
                 }
         
                 sw.suspend();
-                draw_player(main_texture, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
+                let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
+                draw_player(player_texture, frame, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
                 draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
                 draw_enemies_collider(&mut enemies);
