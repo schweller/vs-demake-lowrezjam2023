@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
+use instant::Duration;
 use keyframe::{Keyframe, functions::{EaseOut, EaseInOut}};
 use macroquad::prelude::*;
 
-use crate::{Position, Collider, timer::Timer, tween::Tween};
+use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation};
 use super::{col, get_dir_, dist};
 
 #[derive(Clone)]
@@ -10,7 +13,42 @@ pub struct Enemies {
     pub collider: Collider,
     pub alive: bool,
     pub hp: f32,
-    pub tween: Tween
+    pub tween: Tween,
+    pub anims: HashMap<String, Animation>,
+    pub curr_frame: Option<Rect>
+}
+
+pub struct DeadEnemy {
+    pub position: Position,
+    pub move_tween: Tween,
+    pub opacity_tween: Tween,
+    pub active: bool,
+    pub curr_frame: Option<Rect>
+}
+
+impl DeadEnemy {
+    pub fn new(x: f32, y: f32, frame: Option<Rect>) -> Self {
+        let move_tween = Tween::from_keyframes(
+            vec![
+                Keyframe::new(0.0, 0.0, EaseOut),
+                Keyframe::new(20.0, 0.2, EaseOut),
+            ],
+            0,
+            1,
+            false,
+        );
+        let opacity_tween = Tween::from_keyframes(
+            vec![
+                Keyframe::new(1.0, 0.0, EaseOut),
+                Keyframe::new(0.0, 0.2, EaseOut),
+            ],
+            0,
+            1,
+            false,
+        );
+
+        DeadEnemy { position: Position { x, y }, move_tween, opacity_tween, active: true, curr_frame: frame }
+    }
 }
 
 impl Enemies {
@@ -24,7 +62,26 @@ impl Enemies {
             1,
             false,
         );
+        let mut idle_state_rects : Vec<Rect> = Vec::new();
+        idle_state_rects.push(Rect::new(1., 1., 9., 9.));
+        idle_state_rects.push(Rect::new(10., 1., 9., 9.));
+        idle_state_rects.push(Rect::new(19., 1., 9., 9.));
+        idle_state_rects.push(Rect::new(28., 1., 9., 9.));
+    
+        let idle_state_frame_lenghts : Vec<Duration> = vec![Duration::from_millis(200); idle_state_rects.len()];
+    
+        let idle_animation = Animation {
+            frames: idle_state_rects.clone(),
+            frame_length: idle_state_frame_lenghts.clone(),
+            anim_duration: Duration::from_secs(0),
+            current_frame: 0,
+            current_frame_length: idle_state_frame_lenghts[0],
+            repeating: true
+        };
         
+        let mut anims = HashMap::new();
+        anims.insert("idle".to_string(), idle_animation);
+
         Enemies {
             position: Position {
                 x,
@@ -39,7 +96,9 @@ impl Enemies {
             },
             hp: 2.,
             alive: true,
-            tween
+            tween,
+            anims,
+            curr_frame: Some(Rect::new(1., 1., 9., 9.))
         }
     }
 }
@@ -99,7 +158,9 @@ pub fn update_enemies_pushing(enemies: &mut Vec<Enemies>) {
 }
 
 pub fn draw_enemies(texture: Texture2D, enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut f32) {
-    for e in enemies.iter() {
+    for e in enemies.iter_mut() {
+        let frame = e.anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
+        e.curr_frame = frame;
         let mut flip = false;
         if e.position.x > *x {
             flip = true
@@ -110,37 +171,33 @@ pub fn draw_enemies(texture: Texture2D, enemies: &mut Vec<Enemies>, x: &mut f32,
             e.position.y,
             WHITE,
     DrawTextureParams { 
-                dest_size: Some(vec2(8., 8.)), 
-                source: Some(Rect::new(
-                    20.,
-                    2.,
-                    8.,
-                    8.,
-                )),
+                dest_size: Some(vec2(9., 9.)), 
+                source: frame,
                 flip_x: flip,
             ..Default::default()
         });
     } 
 }
 
-pub fn update_dead_enemies(enemies: &mut Vec<Enemies>, x: &mut f32) {
+pub fn update_dead_enemies(enemies: &mut Vec<DeadEnemy>, x: &mut f32) {
     let delta = get_frame_time();
     for e in enemies.iter_mut() {
-        e.tween.update();
+        e.move_tween.update();
+        e.opacity_tween.update();
         if e.position.x > *x {
-            e.position.x += e.tween.value() * delta;
+            e.position.x += e.move_tween.value() * delta;
         } else {
-            e.position.x -= e.tween.value() * delta;
+            e.position.x -= e.move_tween.value() * delta;
         }
-        if e.tween.finished() {
-            e.alive = false;
+        if e.move_tween.finished() {
+            e.active = false;
         }
     }
 }
 
-pub fn draw_dead_enemies(texture: Texture2D, enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut f32) {
+pub fn draw_dead_enemies(texture: Texture2D, enemies: &mut Vec<DeadEnemy>, x: &mut f32, y: &mut f32) {
     for e in enemies.iter() {
-        if e.alive {
+        if e.active {
             let mut flip = false;
             if e.position.x > *x {
                 flip = true
@@ -149,15 +206,10 @@ pub fn draw_dead_enemies(texture: Texture2D, enemies: &mut Vec<Enemies>, x: &mut
                 texture, 
                 e.position.x,
                 e.position.y,
-                WHITE,
+                Color::new(1.0, 1.0, 1.0, e.opacity_tween.value()),
         DrawTextureParams { 
                     dest_size: Some(vec2(8., 8.)), 
-                    source: Some(Rect::new(
-                        20.,
-                        2.,
-                        8.,
-                        8.,
-                    )),
+                    source: e.curr_frame,
                     flip_x: flip,
                 ..Default::default()
             });

@@ -44,11 +44,11 @@ impl Timer{
 		self.start_time = instant::Instant::now();
 	}
 
-	// pub fn elapsed(&self) -> Duration {
-	// 	let current_time = instant::Instant::now();
-	// 	let elapsed = current_time - self.start_time;
-	// 	elapsed	
-	// }
+	pub fn elapsed(&self) -> Duration {
+		let current_time = instant::Instant::now();
+		let elapsed = current_time - self.start_time;
+		elapsed	
+	}
 
 	pub fn value(&self)-> f32{
 		let current_time = instant::Instant::now();

@@ -9,6 +9,7 @@ mod tween;
 mod enemies;
 mod damage_popup;
 mod animation;
+mod particles;
 use crate::tween::Tween;
 use ui::*;
 use timer::Timer;
@@ -16,6 +17,7 @@ use upgrade::*;
 use enemies::*;
 use damage_popup::*;
 use animation::Animation;
+use particles::*;
 
 use ::tween::{Tweener, Oscillator, CircInOut};
 
@@ -230,13 +232,14 @@ fn spawn_bullet(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, x: &mut f
     }
 }
 
-fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
+fn update_bullets(bullets: &mut Vec<Bullet>, particles: &mut Vec<Particle>) {
     let delta = get_frame_time();
+    
     for bullet in bullets.iter_mut() {
         if bullet.active {
-            // let bull_vec = Vec2::new(bullet.x, bullet.y);
             bullet.x -= bullet.dir_x * delta * 20.; 
             bullet.y -= bullet.dir_y * delta * 20.;
+            spawn_particle(particles, bullet.x, bullet.y);
         }
     }
 }
@@ -266,12 +269,13 @@ fn damage_enemy(
     }
 }
 
-fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &mut Vec<Enemies>) {
+fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &mut Vec<DeadEnemy>) {
     for e in enemies.iter_mut() {
         if e.hp <= 0. { 
             e.alive = false;
-            *player_xp += 40.;
-            dead_enemies.push(Enemies::new(e.position.x, e.position.y));
+            *player_xp += 5.;
+            let mut dead_enemy_obj = DeadEnemy::new(e.position.x, e.position.y, e.curr_frame);
+            dead_enemies.push(dead_enemy_obj);
         }
     }
 }
@@ -371,11 +375,11 @@ pub type TestTween<Value, Time> = Tweener<Value, Time, Box<dyn ::tween::Tween<Va
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let min_camera_zoom = 1.3;
-    let max_camera_zoom = 2.0;
+    // let min_camera_zoom = 1.3;
+    // let max_camera_zoom = 2.0;
     let mut camera_focal_y = screen_height() / 2.0;
     let mut camera_focal_x = screen_width() / 2.0;
-    let main_area_width = 570.;
+    // let main_area_width = 570.;
     let camera_zoom : f32 = 10.0;
 
     let main_texture = load_texture("assets/vs-dx-atlas-padded.png").await.unwrap();
@@ -388,6 +392,8 @@ async fn main() {
     font.set_filter(FilterMode::Nearest);
     let player_texture = load_texture("assets/vs-dx-player-atlas.png").await.unwrap();
     player_texture.set_filter(FilterMode::Nearest);
+    let slime_texture = load_texture("assets/vs-dx-slime-atlas.png").await.unwrap();
+    slime_texture.set_filter(FilterMode::Nearest);
 
     // Player definitions
     let mut player_pos_x = 64.;
@@ -430,9 +436,11 @@ async fn main() {
     // Enemies & Bullets
     let mut enemies: Vec<Enemies> = Vec::new();
     let mut bullets: Vec<Bullet> = Vec::new();
-    let mut dead_enemies: Vec<Enemies> = Vec::new();
+    let mut dead_enemies: Vec<DeadEnemy> = Vec::new();
 
-    let max_b_cooldown = Timer::new(3000);
+    let mut particles: Vec<Particle> = Vec::new();
+
+    let max_b_cooldown = Timer::new(1000);
     let mut bullet_cooldown = max_b_cooldown;
     let mut current_bullet_cooldown_bonus = 1.0;
 
@@ -463,7 +471,7 @@ async fn main() {
     const DT: f32 = 1.0 / 60.0;
 
     let mut test_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
-    let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
+    let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
     let mut looper = Tweener::new(0., 10., 1.5, Oscillator::new(CircInOut));
 
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
@@ -477,11 +485,11 @@ async fn main() {
         camera_focal_x = player_pos_x;
 
         // still not sure here
-        request_new_screen_size(320., 320.);
+        // request_new_screen_size(640., 640.);
         // println!("screen")
 
         set_camera(&Camera2D {
-            target: vec2(camera_focal_x + 4., camera_focal_y + 4.),
+            target: vec2(lerp(camera_focal_x + 4., camera_focal_x - 4., get_frame_time()), lerp(camera_focal_y + 4., camera_focal_y - 4., get_frame_time())),
             zoom: Vec2::new(
                 camera_zoom / 640. * 2., 
                 -camera_zoom / 640. * 2.
@@ -489,6 +497,7 @@ async fn main() {
             // rotation: (camera_target_angle - camera_angle) * t + camera_angle,
             ..Default::default()
         });
+
 
         match level_state {
             LevelState::InGame => {
@@ -505,7 +514,9 @@ async fn main() {
                 update_enemies_pushing(&mut enemies);
                 update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer);
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
-                update_bullets(&mut bullets, &mut enemies);
+
+                update_bullets(&mut bullets, &mut particles);
+                update_particles(&mut particles);
 
                 let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
 
@@ -517,8 +528,14 @@ async fn main() {
                     &player_flip_x, 
                     &player_inv_timer
                 );
-                draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-                draw_dead_enemies(main_texture, &mut dead_enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_enemies(
+                    slime_texture, 
+                    &mut enemies, 
+                    &mut player_pos_x, 
+                    &mut player_pos_y
+                );
+                draw_dead_enemies(slime_texture, &mut dead_enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_particles(&mut particles);
                 draw_bullets(main_texture, &mut bullets);
 
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
@@ -536,7 +553,7 @@ async fn main() {
                 } else {
                     enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
                 }
-
+ 
                 damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &player_damage);
                 kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
 
@@ -555,8 +572,9 @@ async fn main() {
                 // Bullets, enemies, particles, pop-ups
                 bullets.retain(|b| b.active);
                 enemies.retain(|e| e.alive);
-                dead_enemies.retain(|e| e.alive);
-                damage_popups.retain(|e| e.active);          
+                dead_enemies.retain(|e| e.active);
+                damage_popups.retain(|e| e.active);
+                particles.retain(|p| p.active);        
 
                 set_default_camera();
 
@@ -635,7 +653,13 @@ async fn main() {
                 current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
                 current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
                 draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
-                draw_level_up(&choosen_upgrade_index, &upgrades, upgrade_texture, &mut upgrade_menu_tween, &mut init_upgrade_tweener);
+                draw_level_up(
+                    &choosen_upgrade_index, 
+                    &upgrades, 
+                    font, 
+                    &mut upgrade_menu_tween, 
+                    &mut init_upgrade_tweener
+                );
                 draw_level_up_title(font, &mut test_tweener);          
             }
         }

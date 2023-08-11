@@ -88,7 +88,6 @@ pub fn draw_level_up_title(
     font: Font,
     tween: &mut TestTween<f32, f32>
 ) {
-    const DT: f32 = 1.0 / 60.0;
     let delta = get_frame_time();
     draw_text_ex(
         "LEVEL UP!",
@@ -101,31 +100,35 @@ pub fn draw_level_up_title(
 pub fn draw_level_up(
     choosen_upgrade_index: &i32,
     available_upgrades: &Vec<Box<dyn Upgrade>>,
-    upgrade_texture: Texture2D,
+    font: Font,
     tween: &mut Tween,
     init_tween: &mut TestTween<f32, f32>
 ) {
     // Level UP UI
     tween.update();
-    let delta = get_frame_time();
     draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.5));
     for (i, upgrade) in available_upgrades.iter().enumerate() {
+        let delta = get_frame_time();
         let f = i as f32;
         let start = 120.;
-        // let total_spacing = 40.; // It will be the amount of upgrade available
-        // let upgrade_w = (screen_width() - total_spacing) / 3.;
-        let upgrade_h = 160.;
-        let mut x_pos = (screen_width() / 2.) - 245.;
+        let total_spacing = 40.; // It will be the amount of upgrade available
+        let upgrade_w = 180. + total_spacing;
+        // let upgrade_h = 160.;
+        // let mut x_pos = (screen_width() / 2.) - 245.;
+        // let y_pos = start + f * (upgrade_h);
+        let mut x_pos = start + f * (upgrade_w);
+        let mut y_pos = screen_height() / 2.;
         if *choosen_upgrade_index == (i as i32) {
-            x_pos -= 50. + tween.value();
+            // y_pos -= 50. + tween.value();
         }
-        let y_pos = start + f * (upgrade_h);
         // init_tween.move_by(delta);
         // if init_tween.is_finished() {
-            
         // }
-        upgrade.render(
-            upgrade_texture, 
+        if *choosen_upgrade_index == (i as i32) {
+            y_pos -= 50. + tween.value();
+        }
+        upgrade.draw(
+            font, 
             x_pos,
             y_pos, 
             *choosen_upgrade_index == (i as i32)
