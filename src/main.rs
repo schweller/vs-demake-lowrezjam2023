@@ -15,7 +15,16 @@ use upgrade::*;
 use enemies::*;
 use damage_popup::*;
 
-use ::tween::{Tweener, TweenValue, Tween as OtherTween, TweenTime, Looper, Oscillator};
+use ::tween::{Tweener, TweenValue, Tween as OtherTween, TweenTime, Looper, Oscillator, SineInOut, CircInOut};
+
+// Core game loop
+// Start level 1
+// Survive for 3 minutes
+// Go to level 2
+// Survive for 3 minutes
+// Go to level 3
+// Survive for 3 minutes
+// End game
 
 // Spawning enemies
 // - decide where to spawn
@@ -56,9 +65,8 @@ fn window_conf() -> Conf {
         window_title: "LowRezJam 2023".to_owned(), 
         window_width: 640, // 640 + 120 
         window_height: 640, // 320 + 120
-        high_dpi: false,
+        high_dpi: true,
         window_resizable: false,
-        sample_count: 10,
         ..Default::default()
     }
 }
@@ -236,7 +244,12 @@ fn update_bullets(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>) {
     }
 }
 
-fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp: &mut f32, dmg_pop: &mut Vec<DamagePopup>) {
+fn damage_enemy(
+    bullets: &mut Vec<Bullet>, 
+    enemies: &mut Vec<Enemies>, 
+    dmg_pop: &mut Vec<DamagePopup>,
+    player_dmg: &f32
+) {
     for e in enemies.iter_mut() {
         for bullet in bullets.iter_mut() {
             // Collide with enemies
@@ -247,8 +260,9 @@ fn damage_enemy(bullets: &mut Vec<Bullet>, enemies: &mut Vec<Enemies>, player_xp
             ) {
                 if e.hp > 0. {
                     bullet.active = false;
-                    dmg_pop.push(DamagePopup::new(e.position.x, e.position.y));
-                    e.hp -= 1.;
+                    dmg_pop.push(DamagePopup::new(e.position.x, e.position.y, player_dmg.abs() as i32));
+                    e.hp -= player_dmg;
+                    println!("{}", e.hp);
                 }
             }
         }
@@ -301,22 +315,20 @@ pub fn axis(negative: bool, positive: bool) -> f32 {
     ((positive as i8) - (negative as i8)) as f32
 }
 
-fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, is_dashing: &bool) {
-    if !is_dashing {
-        let delta = get_frame_time();
-        let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
-        let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
-        let magnitude = (a.powi(2) + b.powi(2)).sqrt();
-        let foo_x = a / magnitude;
-        let foo_y = b / magnitude;
-        if a != 0. || b != 0. {
-            *x += foo_x * delta * PLAYER_SPEED * speed;
-            *y -= foo_y * delta * PLAYER_SPEED * speed;
-        }
-    
-        if a == -1. { *flip_x = true }
-        if a == 1. { *flip_x = false }
+fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32) {
+    let delta = get_frame_time();
+    let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
+    let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
+    let magnitude = (a.powi(2) + b.powi(2)).sqrt();
+    let foo_x = a / magnitude;
+    let foo_y = b / magnitude;
+    if a != 0. || b != 0. {
+        *x += foo_x * delta * PLAYER_SPEED * speed;
+        *y -= foo_y * delta * PLAYER_SPEED * speed;
     }
+
+    if a == -1. { *flip_x = true }
+    if a == 1. { *flip_x = false }
 
     // if is_key_down(KeyCode::Left) {
     //     *x -= (PLAYER_SPEED * speed) * delta;
@@ -374,167 +386,7 @@ fn get_seconds_from_millis(elapsed_time: u128) -> String {
     }
 }
 
-/// These are our two control points
-pub struct CubicBezier<T>(T, T);
-
-/// This is going to be a strictly speaking **better* implementation:
-/// we're going to implement our Tween generically here. That means, although we'll
-/// only use Points in this example, you could use this to cubic bezier tween anything.
-fn cubic_bezier_for_real(
-    start: Point,
-    destination: Point,
-    duration: f32,
-    quarter_pt: Point,
-    three_quarter_pt: Point,
-) -> Tweener<Point, f32, CubicBezier<Point>> {
-    impl<T: TweenValue> OtherTween<T> for CubicBezier<T> {
-        fn tween(&mut self, delta: T, t: f32) -> T {
-            // we need to write our own lerp with the generic functions available to us
-            fn lerp<T: TweenValue>(a: T, b: T, t: f32) -> T {
-                (b - a).scale(t) + a
-            }
-
-            // cheeky way to get a zero
-            let zero = delta.scale(0.0);
-
-            let a = lerp(zero, self.0, t);
-            let b = lerp(self.0, self.1, t);
-            let c = lerp(self.1, delta, t);
-
-            let d = lerp(a, b, t);
-            let e = lerp(b, c, t);
-
-            lerp(d, e, t)
-        }
-
-        // oh yeah, we're wild
-        fn is_finite(&self) -> bool {
-            false
-        }
-    }
-
-    Tweener::new(start, destination, duration, CubicBezier(quarter_pt, three_quarter_pt))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Point(f32, f32);
-
-impl Point {
-    /// Moves us towards the other Point by a factor of `t`
-    fn lerp(self, other: Self, t: f32) -> Self {
-        self.scale(1.0 - t) + other.scale(t)
-    }
-}
-
-impl Add for Point {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
-impl Sub for Point {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0, self.1 - rhs.1)
-    }
-}
-impl TweenValue for Point {
-    fn scale(self, scale: f32) -> Self {
-        Self(self.0 * scale, self.1 * scale)
-    }
-}
-
-// pub fn draw_bouncy_text(font: Font, text: String, x: f32, y: f32) {
-//     let t = get_frame_time();
-//     let n = min((t as usize) * 50,text.chars().count());
-//     // const t: f32 = 1.0 / 60.0;
-//     let mut pos_x = x - (text.chars().count() as f32) * 2.;
-
-//     let params = TextParams {
-//         font,
-//         font_size: 64,
-//         ..Default::default()
-//     };
-
-//     // println!("{}", text.chars().count());
-//     for i in 0..text.chars().count() {
-//         let substr = &text[i..i+1];
-//         println!("{}", substr);
-//         let xx = pos_x;
-//         let yy = y + 70. * ((i as f32 / 10.) + t * 10. ).cos() - ((i as f32 / 5.) - t * 1.7 + 20.).cos();
-//         draw_text_ex(
-//             substr, 
-//             xx,
-//             yy - 1.,
-//             TextParams {
-//                 font,
-//                 font_size: 64,
-//                 ..Default::default()
-//             }
-//         );
-//         draw_text_ex(
-//             substr, 
-//             xx - 1.,
-//             yy,
-//             TextParams {
-//                 font,
-//                 font_size: 64,
-//                 ..Default::default()
-//             }
-//         );
-//         draw_text_ex(
-//             substr, 
-//             xx + 1.,
-//             yy,
-//             TextParams {
-//                 font,
-//                 font_size: 64,
-//                 ..Default::default()
-//             }
-//         );
-//         draw_text_ex(
-//             substr, 
-//             xx - 1.,
-//             yy + 1.,
-//             TextParams {
-//                 font,
-//                 font_size: 64,
-//                 ..Default::default()
-//             }
-//         );  
-//         draw_text_ex(
-//             substr, 
-//             xx + 1.,
-//             yy + 1.,
-//             params
-//         );
-//         draw_text_ex(
-//             substr, 
-//             xx,
-//             yy + 2.,
-//             params
-//         );
-//         draw_text_ex(
-//             substr, 
-//             xx,
-//             yy + 1.,
-//             params
-//         );
-//         draw_text_ex(
-//             substr, 
-//             xx,
-//             yy,
-//             params
-//         );        
-//         pos_x += 30.;    
-//     }
-// }
-
-// fn to_f32(self) -> f32 {
-//     self as f32
-// }
+pub type TestTween<Value, Time> = Tweener<Value, Time, Box<dyn ::tween::Tween<Value>>>;
 
 #[macroquad::main(window_conf)]
 async fn main() {
@@ -552,6 +404,7 @@ async fn main() {
     let upgrade_texture = load_texture("assets/vs-dx-upgrades-atlas.png").await.unwrap();
     upgrade_texture.set_filter(FilterMode::Nearest);
     let font = load_ttf_font("assets/smolFontMono.ttf").await.unwrap();
+    font.set_filter(FilterMode::Nearest);
 
     // Player definitions
     let mut player_pos_x = 64.;
@@ -566,6 +419,7 @@ async fn main() {
     let mut player_flip_x: bool = false;
     let mut player_speed_bonus = 1.;
     let mut player_inv_timer = Timer::new(1800);
+    let player_damage = 2.;
 
     // Level up UI definitions
     let mut choosen_upgrade_index = 0;
@@ -574,8 +428,10 @@ async fn main() {
     let mut enemies: Vec<Enemies> = Vec::new();
     let mut bullets: Vec<Bullet> = Vec::new();
     let mut dead_enemies: Vec<Enemies> = Vec::new();
-    let max_cooldown = Duration::from_secs(15).as_millis();
-    let mut bullet_cooldown = max_cooldown;
+
+    let max_b_cooldown = Timer::new(3000);
+    let mut bullet_cooldown = max_b_cooldown;
+    let mut current_bullet_cooldown_bonus = 1.0;
 
     let max_enemy_cooldown = Duration::from_secs(8).as_millis();
     let mut enemy_cooldown = max_enemy_cooldown;
@@ -597,21 +453,15 @@ async fn main() {
         true,
     );
 
-    let max_dash_cooldown = Duration::from_secs(3).as_millis();
-    let mut dash_cooldown = Duration::from_secs(0).as_millis();
-    let mut is_dashing = false;
-
     // Level Transition tweener
-    let (start, end) = (0., 1.);
+    let (start, end) = (0., screen_width());
     let duration = 2.0;
     let mut tweener = Tweener::sine_in_out(start, end, duration);
     const DT: f32 = 1.0 / 60.0;
 
-    // Level up title tweener
-    let (lup_t_start, lup_t_end) = (0. as f32, 10. as f32);
-    let duration = 2.0;
-    let lup_tweener = Tweener::sine_in_out(lup_t_start, lup_t_end, duration);
-    let mut looper = Oscillator::new(lup_tweener);
+    let mut test_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
+    let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
+    let mut looper = Tweener::new(0., 10., 1.5, Oscillator::new(CircInOut));
 
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut sw = stopwatch_rs::StopWatch::start();
@@ -623,9 +473,15 @@ async fn main() {
         camera_focal_y = player_pos_y;
         camera_focal_x = player_pos_x;
 
+        // still not sure here
+        request_new_screen_size(320., 320.);
+        // println!("screen")
         set_camera(&Camera2D {
             target: vec2(camera_focal_x + 4., camera_focal_y + 4.),
-            zoom: Vec2::new(camera_zoom / screen_width() * 2., -camera_zoom / screen_height() * 2.),
+            zoom: Vec2::new(
+                camera_zoom / 640. * 2., 
+                -camera_zoom / 640. * 2.
+            ),
             // rotation: (camera_target_angle - camera_angle) * t + camera_angle,
             ..Default::default()
         });
@@ -633,29 +489,13 @@ async fn main() {
         match level_state {
             LevelState::InGame => {
                 choosen_upgrade_index = 0;
-                // println!("mins {}", (get_minutes_from_millis(sw.split().split.as_millis())));
-                // println!("secs {}", (get_seconds_from_millis(sw.split().split.as_millis())));
-
                 for x in 0..80 {
                     for y in 0..50 {
                         draw_map_cell(main_texture, x, y);
                     }
                 }
         
-                // Revisit dashing
-                // if is_key_pressed(KeyCode::Z) {
-                //     is_dashing = true;
-                //     dash_cooldown = max_dash_cooldown;
-                // }
-                // if dash_cooldown <= 0 {
-                //     // spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
-                //     is_dashing = false;
-                // } else {
-                //     dash_cooldown = dash_cooldown.clamp(0, dash_cooldown - 100);
-                // }
-
-                move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus, &is_dashing);
-                // dash_player(&mut player_pos_x, &mut player_pos_y, &is_dashing);
+                move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus);
 
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
                 update_enemies_pushing(&mut enemies);
@@ -673,7 +513,7 @@ async fn main() {
 
                 for popup in damage_popups.iter_mut() {
                     popup.update();
-                    popup.draw(ui_texture);
+                    popup.draw(font);
                 }
 
                 // Spawning code
@@ -684,7 +524,7 @@ async fn main() {
                     enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
                 }
 
-                damage_enemy(&mut bullets, &mut enemies, &mut player_xp, &mut damage_popups);
+                damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &player_damage);
                 kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
 
                 if player_xp >= player_max_xp {
@@ -692,11 +532,10 @@ async fn main() {
                     level_up_player(&mut player_xp, &mut player_max_xp, &mut player_level, &mut level_state);
                 }
                 
-                if bullet_cooldown <= 0 {
+                if bullet_cooldown.finished() {
                     spawn_bullet(&mut bullets, &mut enemies, &mut player_pos_x, &mut player_pos_y);
-                    bullet_cooldown = max_cooldown;
-                } else {
-                    bullet_cooldown = bullet_cooldown.clamp(0, bullet_cooldown - 100);
+                    bullet_cooldown.set_duration_millis(((3000 as f32) * current_bullet_cooldown_bonus) as u64);
+                    bullet_cooldown.restart();
                 }
         
                 // Get rid of things that shouldn't be around anymore
@@ -720,8 +559,11 @@ async fn main() {
                 // Trigger level progression
                 // if sw.split().split.as_millis() > 5000 {
                 //     draw_rectangle(
-                //         0., 0., screen_width(), screen_height(), 
-                //         Color::new(0., 0., 0., tweener.move_by(DT)), 
+                //         0., 
+                //         0., 
+                //         tweener.move_by(DT), 
+                //         screen_height(), 
+                //         Color::new(0., 0., 0., 1.0) 
                 //     );
                 //     if tweener.is_finished() {
                 //         level_state = LevelState::StageCleared
@@ -764,6 +606,7 @@ async fn main() {
                             player_speed_bonus += 0.1;
                         }
                         "FireRate" => {
+                            current_bullet_cooldown_bonus -= 0.1;
                             println!("FireRate upgrade");
                         }
                         "Recovery" => {
@@ -778,8 +621,8 @@ async fn main() {
                 current_player_hp_percentage = (player_hp / player_max_hp) * 100.;
                 current_player_xp_percentage = (player_xp / player_max_xp) * 100.;
                 draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
-                draw_level_up(&choosen_upgrade_index, &upgrades, upgrade_texture, &mut upgrade_menu_tween);
-                draw_level_up_title(font, &mut looper);          
+                draw_level_up(&choosen_upgrade_index, &upgrades, upgrade_texture, &mut upgrade_menu_tween, &mut init_upgrade_tweener);
+                draw_level_up_title(font, &mut test_tweener);          
             }
         }
 

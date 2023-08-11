@@ -31,6 +31,10 @@ impl Timer{
 		elapsed >= self.duration
 	}
 
+	pub fn set_duration_millis(&mut self, duration: u64){
+		self.duration = Duration::from_millis(duration);
+	}
+
 	#[allow(dead_code)]
 	pub fn set_duration(&mut self, duration: u64){
 		self.duration = Duration::from_secs(duration);

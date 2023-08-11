@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
-use tween::{Looper, Tweener, SineInOut, BounceInOut, Oscillator};
+use tween::{Looper, Tweener, SineInOut, BounceInOut, Oscillator, CircInOut};
 
-use crate::{timer::Timer, Upgrade, tween::Tween};
+use crate::{timer::Timer, Upgrade, tween::Tween, TestTween};
 
 pub fn draw_level_ui(
     texture: Texture2D,
@@ -86,14 +86,14 @@ pub fn draw_level_timer_ui(
 
 pub fn draw_level_up_title(
     font: Font,
-    tween: &mut Oscillator<Tweener<f32, f32, SineInOut>>
+    tween: &mut TestTween<f32, f32>
 ) {
     const DT: f32 = 1.0 / 60.0;
-    println!("{}", tween.0.move_by(0.1));
+    let delta = get_frame_time();
     draw_text_ex(
         "LEVEL UP!",
         (screen_width() / 2.) - 150., 
-        50. + tween.0.tween.tween(DT, 100.), 
+        70. + tween.move_by(delta), 
         TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
     );
 }
@@ -102,15 +102,16 @@ pub fn draw_level_up(
     choosen_upgrade_index: &i32,
     available_upgrades: &Vec<Box<dyn Upgrade>>,
     upgrade_texture: Texture2D,
-    tween: &mut Tween
+    tween: &mut Tween,
+    init_tween: &mut TestTween<f32, f32>
 ) {
     // Level UP UI
     tween.update();
+    let delta = get_frame_time();
     draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.5));
-    draw_text("LEVEL UP!", screen_width()/2. - 50., 100., 30., WHITE);
     for (i, upgrade) in available_upgrades.iter().enumerate() {
         let f = i as f32;
-        let start = 70.;
+        let start = 120.;
         // let total_spacing = 40.; // It will be the amount of upgrade available
         // let upgrade_w = (screen_width() - total_spacing) / 3.;
         let upgrade_h = 160.;
@@ -118,7 +119,11 @@ pub fn draw_level_up(
         if *choosen_upgrade_index == (i as i32) {
             x_pos -= 50. + tween.value();
         }
-        let y_pos = start + f * (upgrade_h + 10.);
+        let y_pos = start + f * (upgrade_h);
+        // init_tween.move_by(delta);
+        // if init_tween.is_finished() {
+            
+        // }
         upgrade.render(
             upgrade_texture, 
             x_pos,

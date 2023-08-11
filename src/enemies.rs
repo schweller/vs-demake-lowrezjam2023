@@ -53,8 +53,8 @@ pub fn update_enemies_position(enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut 
         if e.hp > 0. {
             let enem_vec = Vec2::new(e.position.x, e.position.y);
             let dir = enem_vec - player_vec;
-            e.position.x -= dir.x * delta * 0.1; 
-            e.position.y -= dir.y * delta * 0.1;
+            e.position.x -= dir.x * delta * 0.3; 
+            e.position.y -= dir.y * delta * 0.3;
         }
     }
 }
@@ -76,7 +76,7 @@ pub fn update_enemies_colliding(enemies: &mut Vec<Enemies>, x: &f32, y: &f32, hp
 }
 
 fn damage_player(hp: &mut f32) {
-    *hp -= 2.;
+    *hp -= 10.;
 }
 
 pub fn update_enemies_pushing(enemies: &mut Vec<Enemies>) {
@@ -188,7 +188,7 @@ pub fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_
         _ => random = 1.,
     }
 
-    let _rad = 72. + (rand::gen_range(0., 33.) as f32).floor();
+    let _rad = 60. + (rand::gen_range(0., 33.) as f32).floor();
     let x = player_pos_x + direction.cos() * _rad * random;
     let y = player_pos_y + direction.sin() * _rad * random;
 
