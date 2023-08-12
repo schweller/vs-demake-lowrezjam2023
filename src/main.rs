@@ -1,4 +1,4 @@
-use std::{time::Duration, collections::HashMap};
+use std::{time::Duration, collections::HashMap, f32::consts::PI};
 use keyframe::{Keyframe, functions::EaseOut};
 use macroquad::prelude::*;
 
@@ -318,7 +318,7 @@ pub fn axis(negative: bool, positive: bool) -> f32 {
     ((positive as i8) - (negative as i8)) as f32
 }
 
-fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32) {
+fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, particles: &mut Vec<Particle>) {
     let delta = get_frame_time();
     let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
     let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
@@ -328,6 +328,7 @@ fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32) {
     if a != 0. || b != 0. {
         *x += foo_x * delta * PLAYER_SPEED * speed;
         *y -= foo_y * delta * PLAYER_SPEED * speed;
+        spawn_particle(particles, *x+4., *y+5.);
     }
 
     if a == -1. { *flip_x = true }
@@ -374,6 +375,47 @@ fn get_seconds_from_millis(elapsed_time: u128) -> String {
 }
 
 pub type TestTween<Value, Time> = Tweener<Value, Time, Box<dyn ::tween::Tween<Value>>>;
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Direction {
+    Up, Down, Left, Right, UpLeft, UpRight, DownLeft, DownRight,
+}
+
+pub fn get_direction() -> Option<Direction> {
+    let mut dir_vec = vec2(0.,0.);
+    
+    if is_key_down(KeyCode::Up) {
+        dir_vec.y = -1.;
+    } 
+    if is_key_down(KeyCode::Down) {
+        dir_vec.y = 1.; 
+    }
+     if is_key_down(KeyCode::Left) {
+        dir_vec.x = -1.;
+    }
+    if is_key_down(KeyCode::Right) {
+        dir_vec.x = 1.;
+    }
+
+    if dir_vec.x == 0. && dir_vec.y == -1. {
+        Some(Direction::Up)
+    } else if dir_vec.x == 0. && dir_vec.y == 1. {
+        Some(Direction::Down)
+    } else if dir_vec.x == -1. && dir_vec.y == 0. {
+        Some(Direction::Left)
+    } else if dir_vec.x == 1. && dir_vec.y == 0. {
+        Some(Direction::Right)
+    } else if dir_vec.x == 1. && dir_vec.y == 1. {
+        Some(Direction::DownRight)
+    } else if dir_vec.x == -1. && dir_vec.y == -1. {
+        Some(Direction::UpLeft)
+    } else if dir_vec.x == 1. && dir_vec.y == -1. {
+        Some(Direction::UpRight)
+    } else if dir_vec.x == -1. && dir_vec.y == 1. {
+        Some(Direction::DownLeft)
+    } else {
+        None
+    }
+}
 
 #[macroquad::main(window_conf)]
 async fn main() {
@@ -394,7 +436,7 @@ async fn main() {
     font.set_filter(FilterMode::Nearest);
     let player_texture = load_texture("assets/vs-dx-player-atlas.png").await.unwrap();
     player_texture.set_filter(FilterMode::Nearest);
-    let slime_texture = load_texture("assets/vs-dx-slime-atlas.png").await.unwrap();
+    let slime_texture = load_texture("assets/vs-dx-enemies-atlas.png").await.unwrap();
     slime_texture.set_filter(FilterMode::Nearest);
 
     // Player definitions
@@ -466,6 +508,11 @@ async fn main() {
         true,
     );
 
+    let mut bat_enemies : Vec<BatEnemy> = Vec::new();
+    bat_enemies.push(BatEnemy::new(20., 64.));
+    bat_enemies.push(BatEnemy::new(10., 94.));
+    bat_enemies.push(BatEnemy::new(0., 20.));
+
     // Level Transition tweener
     let (start, end) = (0., screen_width());
     let duration = 2.0;
@@ -480,6 +527,12 @@ async fn main() {
     let mut sw = stopwatch_rs::StopWatch::start();
 
     let mut screen_shake_amount: f32 = 0.;
+
+    let mut is_dashing = false;
+    let mut player_direction = None;
+    let mut last_pos_x = player_pos_x;
+    let mut last_pos_y = player_pos_y;
+    let mut dashing_timer = Timer::new(300);
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -511,23 +564,91 @@ async fn main() {
         match level_state {
             LevelState::InGame => {
                 choosen_upgrade_index = 0;
+                let delta = get_frame_time();
                 for x in 0..80 {
                     for y in 0..50 {
                         draw_map_cell(main_texture, x, y);
                     }
                 }
         
-                move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus);
+                player_direction = get_direction();
+
+                if is_key_pressed(KeyCode::A) && !is_dashing {
+                    if let Some(_dir) = player_direction {
+                        dashing_timer.restart();
+                        is_dashing = true;
+                    }
+                }
+
+                if !is_dashing {
+                    move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus, &mut particles);
+                }
+
+                // println!("{}", is_dashing);
 
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
                 update_enemies_pushing(&mut enemies);
                 update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
+                update_bat_enemies_position(&mut bat_enemies);
+                update_bat_enemies_colliding(&mut bat_enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
+
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
 
                 update_bullets(&mut bullets, &mut particles);
                 update_particles(&mut particles);
 
                 let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
+                
+                if is_dashing {
+                    // Determine the dash speed (you can adjust this value)
+                    let dash_speed = 50.0; // Adjust as needed
+        
+                    // Calculate the dash distance based on the dash speed and delta time
+                    let dash_distance = dash_speed * delta;
+                    println!("{} dash_dist", dash_distance);
+        
+                    // Update player position based on dash direction
+                    match player_direction {
+                        Some(Direction::Up) => player_pos_y -= dash_distance,
+                        Some(Direction::Down) => player_pos_y += dash_distance,
+                        Some(Direction::Left) => player_pos_x -= dash_distance,
+                        Some(Direction::Right) => player_pos_x += dash_distance,
+                        Some(Direction::UpLeft) => {
+                            player_pos_x -= dash_distance * 0.7071;
+                            player_pos_y -= dash_distance * 0.7071;
+                        }
+                        Some(Direction::UpRight) => {
+                            player_pos_x += dash_distance * 0.7071;
+                            player_pos_y -= dash_distance * 0.7071;
+                        }
+                        Some(Direction::DownLeft) => {
+                            player_pos_x -= dash_distance * 0.7071;
+                            player_pos_y += dash_distance * 0.7071;
+                        }
+                        Some(Direction::DownRight) => {
+                            player_pos_x += dash_distance * 0.7071;
+                            player_pos_y += dash_distance * 0.7071;
+                        }
+                        None => {}
+                    }
+
+                    spawn_particle(&mut particles, player_pos_x+4., player_pos_y+4.);
+        
+                    // Perform collision detection and adjust position if needed
+                    // (You'll need to implement collision detection logic here)
+        
+                    // Check if the dash is complete (e.g., reached a certain distance)
+                    // For simplicity, we'll consider the dash complete after a fixed distance
+                    if dashing_timer.finished() {
+                        is_dashing = false;
+                    }
+                } else {
+                    last_pos_x = player_pos_x;
+                    last_pos_y = player_pos_y;
+                }
+
+                // Draw functions
+                draw_particles(&mut particles);
 
                 draw_player(
                     player_texture,
@@ -543,8 +664,11 @@ async fn main() {
                     &mut player_pos_x, 
                     &mut player_pos_y
                 );
+                draw_bat_enemies(
+                    slime_texture,
+                    &mut bat_enemies
+                );
                 draw_dead_enemies(slime_texture, &mut dead_enemies, &mut player_pos_x, &mut player_pos_y);
-                draw_particles(&mut particles);
                 draw_bullets(main_texture, &mut bullets);
 
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
