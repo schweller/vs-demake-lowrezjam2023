@@ -248,6 +248,7 @@ fn damage_enemy(
     bullets: &mut Vec<Bullet>, 
     enemies: &mut Vec<Enemies>, 
     dmg_pop: &mut Vec<DamagePopup>,
+    screen_shake_amount: &mut f32,
     player_dmg: &f32
 ) {
     for e in enemies.iter_mut() {
@@ -261,6 +262,7 @@ fn damage_enemy(
                 if e.hp > 0. {
                     bullet.active = false;
                     dmg_pop.push(DamagePopup::new(e.position.x, e.position.y, player_dmg.abs() as i32));
+                    *screen_shake_amount += 1.0;
                     e.hp -= player_dmg;
                     println!("{}", e.hp);
                 }
@@ -477,6 +479,8 @@ async fn main() {
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut sw = stopwatch_rs::StopWatch::start();
 
+    let mut screen_shake_amount: f32 = 0.;
+
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
 
@@ -487,9 +491,14 @@ async fn main() {
         // still not sure here
         // request_new_screen_size(640., 640.);
         // println!("screen")
+        screen_shake_amount *= 0.94;
+        let screen_shake = Vec2::new(
+            rand::gen_range(-screen_shake_amount, screen_shake_amount),
+            rand::gen_range(-screen_shake_amount, screen_shake_amount),
+        );
 
         set_camera(&Camera2D {
-            target: vec2(lerp(camera_focal_x + 4., camera_focal_x - 4., get_frame_time()), lerp(camera_focal_y + 4., camera_focal_y - 4., get_frame_time())),
+            target: vec2(lerp(camera_focal_x + 4., camera_focal_x - 4., get_frame_time()), lerp(camera_focal_y + 4., camera_focal_y - 4., get_frame_time())) + screen_shake,
             zoom: Vec2::new(
                 camera_zoom / 640. * 2., 
                 -camera_zoom / 640. * 2.
@@ -512,7 +521,7 @@ async fn main() {
 
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
                 update_enemies_pushing(&mut enemies);
-                update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer);
+                update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
 
                 update_bullets(&mut bullets, &mut particles);
@@ -554,7 +563,7 @@ async fn main() {
                     enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
                 }
  
-                damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &player_damage);
+                damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &mut screen_shake_amount, &player_damage);
                 kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
 
                 if player_xp >= player_max_xp {

@@ -118,7 +118,11 @@ pub fn update_enemies_position(enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut 
     }
 }
 
-pub fn update_enemies_colliding(enemies: &mut Vec<Enemies>, x: &f32, y: &f32, hp: &mut f32, player_inv_timer: &mut Timer) {
+pub fn update_enemies_colliding(
+    enemies: &mut Vec<Enemies>, 
+    x: &f32, y: &f32, hp: &mut f32, 
+    player_inv_timer: &mut Timer,
+    screen_shake_amount: &mut f32) {
     for e in enemies.iter() {
         let player_pos = Position {
             x: *x,
@@ -128,6 +132,7 @@ pub fn update_enemies_colliding(enemies: &mut Vec<Enemies>, x: &f32, y: &f32, hp
             if col(player_pos, e.position, 8.) {
                 println!("colliding with player");
                 damage_player(hp);
+                *screen_shake_amount += 4.0;
                 player_inv_timer.restart();
             }
         }
