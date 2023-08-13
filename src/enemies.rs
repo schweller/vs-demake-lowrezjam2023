@@ -4,7 +4,7 @@ use instant::Duration;
 use keyframe::{Keyframe, functions::{EaseOut, EaseInOut}};
 use macroquad::prelude::*;
 
-use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation};
+use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup};
 use super::{col, get_dir_, dist};
 
 #[derive(Clone)]
@@ -352,3 +352,118 @@ pub fn update_bat_enemies_colliding(
     }
 }
 
+pub struct TowerEnemy {
+    pub x: f32,
+    pub y: f32,
+    pub bullet_cooldown: Timer,
+    // pub initial_y: f32,
+    // pub anims: HashMap<String, Animation>,
+    // pub curr_frame: Option<Rect>
+}
+
+impl TowerEnemy {
+    pub fn new(x: f32, y: f32) -> Self {
+        let bullet_cooldown = Timer::new(1000);
+        TowerEnemy { x, y, bullet_cooldown }
+    }
+
+    fn fire_towards_player(&self, player_x: f32, player_y: f32, bullets: Vec<Bullet>) {
+
+    }
+
+    pub fn update(&mut self, player_x: f32, player_y: f32, bullets: &mut Vec<Bullet>) {
+        if self.bullet_cooldown.finished() {
+            let mut _dist= 128.;
+            let mut _dir: Vec2 = vec2(1.,1.);
+            let _d = dist(
+                Position { x: self.x, y: self.y} ,
+                Position { x: player_x, y: player_y },
+            _dist);
+            if _d < _dist {
+                _dist= _d;
+                // _dir = get_dir(e.position.x,e.position.y,*x,*y);
+                // let foo = na::Vector2::new(*x, *y);
+                // let bar = na::Vector2::new(e.position.x, e.position.y);
+                // _dir = foo.sub(bar).norm();
+                // println!("{}", _dir);
+                _dir = Vec2::new(self.x, self.y) - Vec2::new(player_x, player_y);
+                if let Some(d) = _dir.try_normalize() {
+                    _dir = d;
+                }
+            }
+            bullets.push(Bullet { x: self.x + 2., y: self.y + 2., dir_x: _dir.x, dir_y: _dir.y, active: true });
+            self.bullet_cooldown.restart();         
+        }
+    }
+}
+
+pub fn draw_tower_enemies(texture: Texture2D, enemies: &mut Vec<TowerEnemy>) {
+    for e in enemies.iter() {
+        draw_rectangle(e.x, e.y, 4., 4., WHITE);
+    }
+}
+
+pub fn update_tower_enemies(enemies: &mut Vec<TowerEnemy>, player_x: &f32, player_y: &f32, bullets: &mut Vec<Bullet>) {
+    for e in enemies.iter_mut() {
+        e.update(*player_x, *player_y, bullets);
+    }
+}
+
+pub fn update_enemy_bullets(bullets: &mut Vec<Bullet>, particles: &mut Vec<Particle>, delta: f32) {
+    for bullet in bullets.iter_mut() {
+        if bullet.active {
+            bullet.x -= bullet.dir_x * delta * 20.; 
+            bullet.y -= bullet.dir_y * delta * 20.;
+            spawn_particle(particles, bullet.x, bullet.y, Box::new(EnemyShotParticle{}));
+        }
+    }
+}
+
+pub fn bullet_damage_player(
+    bullets: &mut Vec<Bullet>, 
+    // enemies: &mut Vec<Enemies>,
+    x: &f32, y: &f32,
+    player_hp: &f32,
+    dmg_pop: &mut Vec<DamagePopup>,
+    screen_shake_amount: &mut f32,
+    // player_dmg: &f32
+) {
+    for bullet in bullets.iter_mut() {
+        // Collide with enemies
+        if col(
+            Position { x: bullet.x, y: bullet.y }, 
+            Position { x: *x + 2., y: *y + 2. }, 
+            5.
+        ) {
+            if *player_hp > 0. {
+                bullet.active = false;
+                // dmg_pop.push(DamagePopup::new(e.position.x, e.position.y, player_dmg.abs() as i32));
+                *screen_shake_amount += 1.0;
+                // e.hp -= player_dmg;
+                // println!("{}", e.hp);
+            }
+        }
+    }
+}
+
+pub fn draw_enemy_bullets(texture: Texture2D, bullets: &mut Vec<Bullet>) {
+    for bullet in bullets.iter() {
+        if bullet.active {
+            draw_texture_ex(
+                texture, 
+                bullet.x,
+                bullet.y, 
+                WHITE,
+        DrawTextureParams { 
+                    dest_size: Some(vec2(8., 8.)), 
+                    source: Some(Rect::new(
+                        40.,
+                        2.,
+                        8.,
+                        8.,
+                    )),
+                ..Default::default()
+            })
+        }
+    }
+}

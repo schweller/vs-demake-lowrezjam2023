@@ -182,3 +182,7 @@ pub fn draw_level_up(
         );
     }
 }
+
+pub fn draw_stage_cleared() {
+    
+} 

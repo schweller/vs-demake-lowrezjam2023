@@ -493,6 +493,8 @@ async fn main() {
     let max_enemy_cooldown = Duration::from_secs(8).as_millis();
     let mut enemy_cooldown = max_enemy_cooldown;
 
+    let mut enemy_bullets: Vec<Bullet> = Vec::new();
+
     let mut level_state = LevelState::LevelUp;
 
     // let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
@@ -515,9 +517,12 @@ async fn main() {
     bat_enemies.push(BatEnemy::new(10., 94.));
     bat_enemies.push(BatEnemy::new(0., 20.));
 
+    let mut tower_enemies: Vec<TowerEnemy> = Vec::new();
+    tower_enemies.push(TowerEnemy::new(40., 40.));
+
     // Level Transition tweener
     let (start, end) = (0., screen_width());
-    let duration = 2.0;
+    let duration = 5.0;
     let mut tweener = Tweener::sine_in_out(start, end, duration);
     const DT: f32 = 1.0 / 60.0;
 
@@ -542,6 +547,7 @@ async fn main() {
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
+        let delta = get_frame_time();
 
         let camera_buffer = (screen_height() / camera_zoom) * 2.0 * 0.1;
         camera_focal_y = player_pos_y;
@@ -550,6 +556,7 @@ async fn main() {
         // still not sure here
         // request_new_screen_size(640., 640.);
         screen_shake_amount *= 0.94;
+
         let screen_shake = Vec2::new(
             rand::gen_range(-screen_shake_amount, screen_shake_amount),
             rand::gen_range(-screen_shake_amount, screen_shake_amount),
@@ -564,11 +571,9 @@ async fn main() {
             ..Default::default()
         });
 
-
         match level_state {
             LevelState::InGame => {
                 choosen_upgrade_index = 0;
-                let delta = get_frame_time();
                 for x in 0..80 {
                     for y in 0..50 {
                         draw_map_cell(main_texture, x, y);
@@ -600,9 +605,11 @@ async fn main() {
                 update_bat_enemies_position(&mut bat_enemies);
                 update_bat_enemies_colliding(&mut bat_enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
 
+                update_tower_enemies(&mut tower_enemies, &player_pos_x, &player_pos_y, &mut enemy_bullets);
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
 
                 update_bullets(&mut bullets, &mut particles);
+                update_enemy_bullets(&mut enemy_bullets, &mut particles, delta);
                 update_particles(&mut particles);
                 
                 if player_is_dashing {
@@ -668,12 +675,14 @@ async fn main() {
                     &mut player_pos_x, 
                     &mut player_pos_y
                 );
+                draw_tower_enemies(slime_texture, &mut tower_enemies);
                 draw_bat_enemies(
                     slime_texture,
                     &mut bat_enemies
                 );
                 draw_dead_enemies(slime_texture, &mut dead_enemies, &mut player_pos_x, &mut player_pos_y);
                 draw_bullets(main_texture, &mut bullets);
+                draw_enemy_bullets(main_texture, &mut enemy_bullets);
 
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
                 // draw_enemies_collider(&mut enemies);
@@ -695,6 +704,7 @@ async fn main() {
                 }
  
                 damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &mut screen_shake_amount, &player_damage);
+                bullet_damage_player(&mut enemy_bullets, &player_pos_x, &player_pos_y, &mut player_hp, &mut damage_popups, &mut screen_shake_amount);
                 kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
 
                 if player_xp >= player_max_xp {
@@ -711,6 +721,7 @@ async fn main() {
                 // Get rid of things that shouldn't be around anymore
                 // Bullets, enemies, particles, pop-ups
                 bullets.retain(|b| b.active);
+                enemy_bullets.retain(|b| b.active);
                 enemies.retain(|e| e.alive);
                 dead_enemies.retain(|e| e.active);
                 damage_popups.retain(|e| e.active);
@@ -729,20 +740,41 @@ async fn main() {
 
                 // Trigger level progression
                 // if sw.split().split.as_millis() > 5000 {
-                //     draw_rectangle(
-                //         0., 
-                //         0., 
-                //         tweener.move_by(DT), 
-                //         screen_height(), 
-                //         Color::new(0., 0., 0., 1.0) 
-                //     );
-                //     if tweener.is_finished() {
-                //         level_state = LevelState::StageCleared
+                //     // destroy all entities 
+                //     // but the player
+                //     // - deallocates but not sure if its good
+                //     enemies = Vec::new();
+                //     bat_enemies = Vec::new();
+                //     bullets = Vec::new();
+                //     dead_enemies = Vec::new();
+                //     damage_popups = Vec::new();
+                //     particles = Vec::new();
+
+                //     if sw.split().split.as_millis() < 6000 {
+                //         screen_shake_amount += 0.5;
+                //     }
+
+                //     if sw.split().split.as_millis() > 8000 {
+                //         draw_rectangle(
+                //             0., 
+                //             0., 
+                //             tweener.move_by(DT), 
+                //             screen_height(), 
+                //             Color::from_rgba(37, 33, 41, 255)
+                //         );
+                //         if tweener.is_finished() {
+                //             level_state = LevelState::StageCleared
+                //         }
                 //     }
                 // }
             },
             LevelState::StageCleared => {
-                clear_background(BLACK);
+                clear_background(Color::from_rgba(37, 33, 41, 255));
+                // for x in 0..80 {
+                //     for y in 0..50 {
+                //         draw_map_cell(main_texture, x, y);
+                //     }
+                // }                
                 // clear vecs/entities
                 // reset defaults
                 // next stage?

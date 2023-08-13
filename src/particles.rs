@@ -53,6 +53,22 @@ impl ParticleType for ShotParticle {
     }
 }
 
+pub struct EnemyShotParticle {}
+
+impl ParticleType for EnemyShotParticle {
+    fn new(&self, x: f32, y: f32) -> Particle {
+        let mut particle = Particle {
+            ..Default::default()
+        };
+        particle.color_start = Color::from_rgba(168, 132, 243, 255);
+        particle.color_end = Color::new(0.2, 0.2, 0.2, 0.1); 
+        particle.x = x + (rand::gen_range(0.5, 1.) - 0.5) * 2.;
+        particle.y = y + (rand::gen_range(0.5, 1.) - 0.5) * 2.;
+
+        particle        
+    }
+}
+
 pub struct PlayerDashParticle {
     pub texture: Texture2D
 }
