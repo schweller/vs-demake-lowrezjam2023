@@ -64,8 +64,9 @@ impl ParticleType for PlayerDashParticle {
         };
         particle.velocity_start = vec2(1., 0.); 
         particle.velocity_end = vec2(1., 0.);
-        
-        particle.x = x + (rand::gen_range(0.5, 1.) - 0.5) * 0.5;
+        particle.color_start = Color::new(1., 1., 1., 0.3); 
+        particle.color_end = Color::new(0.2, 0.2, 0.2, 0.1); 
+        particle.x = x + (rand::gen_range(0.5, 1.) - 0.5) * 0.1;
         particle.y = y + (rand::gen_range(0.5, 1.) - 0.5) * 0.5;
         particle.texture = Some(self.texture);
 

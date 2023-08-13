@@ -10,7 +10,11 @@ pub trait Upgrade {
 
 pub struct SpeedUpgrade {}
 pub struct FireRateUpgrade {}
-pub struct RecoveryUpgrade {}
+pub struct RegenUpgrade {}
+
+pub struct DashUpgrade {}
+pub struct IframeUpgrade {}
+pub struct PenShotUpgrade {}
 
 fn draw_upgrade_bg(w: f32, h: f32, x: f32, y: f32) {
     draw_rectangle(
@@ -86,7 +90,7 @@ impl Upgrade for FireRateUpgrade {
     }  
 }
 
-impl Upgrade for RecoveryUpgrade {
+impl Upgrade for RegenUpgrade {
     fn get_name(&self) -> &'static str {
         "Recovery"
     }
@@ -116,7 +120,7 @@ pub fn pick_random_upgrades() -> Vec<Box<dyn Upgrade>> {
     
     upgrades.push(Box::new(FireRateUpgrade{}));
     // upgrades.push(Box::new(SpeedUpgrade{}));
-    upgrades.push(Box::new(RecoveryUpgrade{}));
+    upgrades.push(Box::new(RegenUpgrade{}));
 
     upgrades
 }

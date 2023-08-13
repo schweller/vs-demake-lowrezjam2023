@@ -121,6 +121,7 @@ pub fn update_enemies_position(enemies: &mut Vec<Enemies>, x: &mut f32, y: &mut 
 pub fn update_enemies_colliding(
     enemies: &mut Vec<Enemies>, 
     x: &f32, y: &f32, hp: &mut f32, 
+    player_is_dashing: &bool,
     player_inv_timer: &mut Timer,
     screen_shake_amount: &mut f32) 
 {
@@ -129,7 +130,7 @@ pub fn update_enemies_colliding(
             x: *x,
             y: *y
         };
-        if player_inv_timer.value() == 1.0 {
+        if !*player_is_dashing && player_inv_timer.value() == 1.0 {
             if col(player_pos, e.position, 8.) {
                 println!("colliding with player");
                 damage_player(hp);

@@ -49,10 +49,10 @@ use ::tween::{Tweener, Oscillator, CircInOut};
 // - Render upgrade choices - done
 
 // Juicing
-// - screen shake
+// - screen shake✅
 // - flash enemie on hit
-// - particles
-// - animate sprites
+// - particles✅
+// - animate sprites✅
 // - sound
 
 // Improve collision
@@ -320,7 +320,7 @@ pub fn axis(negative: bool, positive: bool) -> f32 {
     ((positive as i8) - (negative as i8)) as f32
 }
 
-fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, particles: &mut Vec<Particle>, delta: f32) {
+fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, delta: f32) {
     let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
     let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
     let magnitude = (a.powi(2) + b.powi(2)).sqrt();
@@ -329,7 +329,6 @@ fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, particl
     if a != 0. || b != 0. {
         *x += foo_x * delta * PLAYER_SPEED * speed;
         *y -= foo_y * delta * PLAYER_SPEED * speed;
-        // spawn_particle(particles, *x+4., *y+5.);
     }
 
     if a == -1. { *flip_x = true }
@@ -523,6 +522,12 @@ async fn main() {
     const DT: f32 = 1.0 / 60.0;
 
     let mut test_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
+    let mut level_up_letters_tweener : TestTween<f32, f32> = Tweener::new(
+        -3., 
+        3., 
+        2.2, 
+        Box::new(Oscillator::new(::tween::SineInOut))
+    );
     let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
     let mut looper = Tweener::new(0., 10., 1.5, Oscillator::new(CircInOut));
 
@@ -531,11 +536,9 @@ async fn main() {
 
     let mut screen_shake_amount: f32 = 0.;
 
-    let mut is_dashing = false;
+    let mut player_is_dashing = false;
     let mut player_direction = None;
-    let mut last_pos_x = player_pos_x;
-    let mut last_pos_y = player_pos_y;
-    let mut dashing_timer = Timer::new(300);
+    let mut dashing_timer = Timer::new(500);
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -546,7 +549,6 @@ async fn main() {
 
         // still not sure here
         // request_new_screen_size(640., 640.);
-        // println!("screen")
         screen_shake_amount *= 0.94;
         let screen_shake = Vec2::new(
             rand::gen_range(-screen_shake_amount, screen_shake_amount),
@@ -573,22 +575,20 @@ async fn main() {
                     }
                 }
 
-                if is_key_pressed(KeyCode::A) && !is_dashing {
+                if is_key_pressed(KeyCode::A) && !player_is_dashing {
                     player_direction = get_direction();
                     if let Some(_dir) = player_direction {
                         dashing_timer.restart();
-                        is_dashing = true;
+                        player_is_dashing = true;
                     }
                 }
 
-                if !is_dashing {
-                    // player.move_me(delta);
+                if !player_is_dashing {
                     move_player(
                         &mut player_pos_x, 
                         &mut player_pos_y, 
                         &mut player_flip_x, 
                         &player_speed_bonus, 
-                        &mut particles,
                         delta
                     );
                 }
@@ -596,7 +596,7 @@ async fn main() {
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
 
                 update_enemies_pushing(&mut enemies);
-                update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
+                update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &player_is_dashing, &mut player_inv_timer, &mut screen_shake_amount);
                 update_bat_enemies_position(&mut bat_enemies);
                 update_bat_enemies_colliding(&mut bat_enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
 
@@ -605,13 +605,11 @@ async fn main() {
                 update_bullets(&mut bullets, &mut particles);
                 update_particles(&mut particles);
                 
-                if is_dashing {
-                    // Determine the dash speed (you can adjust this value)
-                    let dash_speed = 50.0; // Adjust as needed
+                if player_is_dashing {
+                    let dash_speed = 30.0;
         
                     // Calculate the dash distance based on the dash speed and delta time
                     let dash_distance = dash_speed * delta;
-                    println!("{} dash_dist", dash_distance);
         
                     // Update player position based on dash direction
                     // 0.7071 was pure experimentation
@@ -645,18 +643,14 @@ async fn main() {
                         player_pos_y,
                         Box::new(PlayerDashParticle{ texture: player_texture})
                     );
-        
-                    // Perform collision detection and adjust position if needed
-                    // (You'll need to implement collision detection logic here)
-        
-                    // Check if the dash is complete (e.g., reached a certain distance)
-                    // For simplicity, we'll consider the dash complete after a fixed distance
+
                     if dashing_timer.finished() {
-                        is_dashing = false;
+                        player_is_dashing = false;
                     }
                 }
 
                 let player_frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
+                
                 // Draw functions
                 draw_particles(&mut particles);
                 // player.draw(player_texture, frame);
@@ -692,6 +686,9 @@ async fn main() {
                 // Spawning code
                 if enemy_cooldown <= 0 {
                     spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
+                    bat_enemies.push(
+                        BatEnemy::new(player_pos_x - 64., player_pos_y)
+                    );
                     enemy_cooldown = max_enemy_cooldown;
                 } else {
                     enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
@@ -803,7 +800,7 @@ async fn main() {
                     &mut upgrade_menu_tween, 
                     &mut init_upgrade_tweener
                 );
-                draw_level_up_title(font, &mut test_tweener);          
+                draw_level_up_title(font, &mut test_tweener, &mut level_up_letters_tweener);
             }
         }
 

@@ -86,15 +86,65 @@ pub fn draw_level_timer_ui(
 
 pub fn draw_level_up_title(
     font: Font,
-    tween: &mut TestTween<f32, f32>
+    tween: &mut TestTween<f32, f32>,
+    letter_tween: &mut TestTween<f32, f32>
 ) {
     let delta = get_frame_time();
     draw_text_ex(
-        "LEVEL UP!",
+        "l",
         (screen_width() / 2.) - 150., 
-        70. + tween.move_by(delta), 
+        80. + letter_tween.move_by(delta), 
         TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
     );
+    draw_text_ex(
+        "e",
+        (screen_width() / 2.) - 110., 
+        80. - letter_tween.move_by(delta),
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
+    draw_text_ex(
+        "v",
+        (screen_width() / 2.) - 70., 
+        80. + letter_tween.move_by(delta), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
+    draw_text_ex(
+        "e",
+        (screen_width() / 2.) - 30., 
+        80. - letter_tween.move_by(delta), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );       
+    draw_text_ex(
+        "l",
+        (screen_width() / 2.) + 10., 
+        80. + letter_tween.move_by(delta), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
+    draw_text_ex(
+        "u",
+        (screen_width() / 2.) + 50., 
+        80. - letter_tween.move_by(delta), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
+    draw_text_ex(
+        "p",
+        (screen_width() / 2.) + 90., 
+        80. + letter_tween.move_by(delta), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
+    draw_text_ex(
+        "!",
+        (screen_width() / 2.) + 130., 
+        80. - letter_tween.move_by(delta), 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );                 
+
+    // draw_text_ex(
+    //     "LEVEL UP!",
+    //     (screen_width() / 2.) - 150., 
+    //     70. + tween.move_by(delta), 
+    //     TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    // );
 }
 
 pub fn draw_level_up(
@@ -116,11 +166,8 @@ pub fn draw_level_up(
         // let upgrade_h = 160.;
         // let mut x_pos = (screen_width() / 2.) - 245.;
         // let y_pos = start + f * (upgrade_h);
-        let mut x_pos = start + f * (upgrade_w);
+        let x_pos = start + f * (upgrade_w);
         let mut y_pos = screen_height() / 2.;
-        if *choosen_upgrade_index == (i as i32) {
-            // y_pos -= 50. + tween.value();
-        }
         // init_tween.move_by(delta);
         // if init_tween.is_finished() {
         // }
