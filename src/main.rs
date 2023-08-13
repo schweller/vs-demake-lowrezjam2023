@@ -49,10 +49,10 @@ use ::tween::{Tweener, Oscillator, CircInOut};
 // - Render upgrade choices - done
 
 // Juicing
-// - screen shake✅
+// - screen shake ✅
 // - flash enemie on hit
-// - particles✅
-// - animate sprites✅
+// - particles ✅
+// - animate sprites ✅
 // - sound
 
 // Improve collision
@@ -278,7 +278,18 @@ fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &
         if e.hp <= 0. { 
             e.alive = false;
             *player_xp += 5.;
-            let mut dead_enemy_obj = DeadEnemy::new(e.position.x, e.position.y, e.curr_frame);
+            let dead_enemy_obj = DeadEnemy::new(e.position.x, e.position.y, e.curr_frame);
+            dead_enemies.push(dead_enemy_obj);
+        }
+    }
+}
+
+fn kill_bat_enemies(enemies: &mut Vec<BatEnemy>, player_xp: &mut f32, dead_enemies: &mut Vec<DeadEnemy>) {
+    for e in enemies.iter_mut() {
+        if e.hp <= 0. { 
+            e.active = false;
+            *player_xp += 5.;
+            let dead_enemy_obj = DeadEnemy::new(e.x, e.y, e.curr_frame);
             dead_enemies.push(dead_enemy_obj);
         }
     }
@@ -513,12 +524,7 @@ async fn main() {
     );
 
     let mut bat_enemies : Vec<BatEnemy> = Vec::new();
-    bat_enemies.push(BatEnemy::new(20., 64.));
-    bat_enemies.push(BatEnemy::new(10., 94.));
-    bat_enemies.push(BatEnemy::new(0., 20.));
-
     let mut tower_enemies: Vec<TowerEnemy> = Vec::new();
-    tower_enemies.push(TowerEnemy::new(40., 40.));
 
     // Level Transition tweener
     let (start, end) = (0., screen_width());
@@ -603,7 +609,16 @@ async fn main() {
                 update_enemies_pushing(&mut enemies);
                 update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &player_is_dashing, &mut player_inv_timer, &mut screen_shake_amount);
                 update_bat_enemies_position(&mut bat_enemies);
-                update_bat_enemies_colliding(&mut bat_enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
+                update_bat_enemies_colliding(
+                    &mut bat_enemies, 
+                    &mut player_pos_x, 
+                    &mut player_pos_y, 
+                    &mut player_hp, 
+                    &mut player_inv_timer, 
+                    &mut screen_shake_amount, 
+                    &mut damage_popups,
+                    &player_is_dashing
+                );
 
                 update_tower_enemies(&mut tower_enemies, &player_pos_x, &player_pos_y, &mut enemy_bullets);
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
@@ -613,7 +628,7 @@ async fn main() {
                 update_particles(&mut particles);
                 
                 if player_is_dashing {
-                    let dash_speed = 30.0;
+                    let dash_speed = 60.0;
         
                     // Calculate the dash distance based on the dash speed and delta time
                     let dash_distance = dash_speed * delta;
@@ -692,20 +707,56 @@ async fn main() {
                     popup.draw(font);
                 }
 
-                // Spawning code
+                // Spawning enemies
+                // Count slimes
                 if enemy_cooldown <= 0 {
                     spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
-                    bat_enemies.push(
-                        BatEnemy::new(player_pos_x - 64., player_pos_y)
-                    );
                     enemy_cooldown = max_enemy_cooldown;
                 } else {
                     enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
                 }
+
+                // Count Bats
+                println!("bats {}", bat_enemies.len());
+                if bat_enemies.len() < 5 {
+                    let x_dir: f32;
+                    match rand::gen_range(0, 2) {
+                        0 => x_dir = -1.,
+                        _ => x_dir = 1.,
+                    }
+                    let spawn_pos_y = player_pos_y * (rand::gen_range(0.5, 2.));
+                    bat_enemies.push(
+                        BatEnemy::new(player_pos_x - 64. * (x_dir), spawn_pos_y, x_dir)
+                    );
+                }
+
+                // And towers
+                if tower_enemies.len() < 2 {
+                    // Random around radius
+                    // let angle = rand::gen_range(0.0, std::f32::consts::TAU); // Random angle in radians
+                    // let distance = rand::gen_range(20.,100.); // Random distance within the spawn radius
+                
+                    // let spawn_x = player_pos_x + distance * angle.cos();
+                    // let spawn_y = player_pos_y + distance * angle.sin();
+                
+                    // Random around circ 
+                    let angle = rand::gen_range(0.0,std::f32::consts::TAU); // Random angle in radians
+
+                    let spawn_x = player_pos_x + 32. * angle.cos();
+                    let spawn_y = player_pos_y + 32. * angle.sin();
+
+                    tower_enemies.push(
+                        TowerEnemy::new(spawn_x, spawn_y)
+                    );
+                }
+
+                // Count Towers
  
                 damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &mut screen_shake_amount, &player_damage);
-                bullet_damage_player(&mut enemy_bullets, &player_pos_x, &player_pos_y, &mut player_hp, &mut damage_popups, &mut screen_shake_amount);
+                bullet_damage_player(&mut enemy_bullets, &player_pos_x, &player_pos_y, &mut player_hp, &mut damage_popups, &mut screen_shake_amount, &mut player_inv_timer, &player_is_dashing);
                 kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
+                kill_bat_enemies(&mut bat_enemies, &mut player_xp, &mut dead_enemies);
+                clean_bat_enemies(&mut bat_enemies, &player_pos_x, &player_pos_y);
 
                 if player_xp >= player_max_xp {
                     upgrades = pick_random_upgrades();
@@ -723,6 +774,7 @@ async fn main() {
                 bullets.retain(|b| b.active);
                 enemy_bullets.retain(|b| b.active);
                 enemies.retain(|e| e.alive);
+                bat_enemies.retain(|e| e.active);
                 dead_enemies.retain(|e| e.active);
                 damage_popups.retain(|e| e.active);
                 particles.retain(|p| p.active);        

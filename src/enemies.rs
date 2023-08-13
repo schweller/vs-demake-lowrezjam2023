@@ -4,7 +4,7 @@ use instant::Duration;
 use keyframe::{Keyframe, functions::{EaseOut, EaseInOut}};
 use macroquad::prelude::*;
 
-use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup};
+use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup, Direction};
 use super::{col, get_dir_, dist};
 
 #[derive(Clone)]
@@ -259,11 +259,15 @@ pub struct BatEnemy {
     pub y: f32,
     pub initial_y: f32,
     pub anims: HashMap<String, Animation>,
-    pub curr_frame: Option<Rect>
+    pub curr_frame: Option<Rect>,
+    pub hp: f32,
+    pub active: bool,
+    pub x_dir: f32,
+    pub clean_timer: Timer
 }
 
 impl BatEnemy {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32, direction: f32) -> Self {
         // let tween = Tween::from_keyframes(
         //     vec![
         //         Keyframe::new(0.0, 0.0, EaseOut),
@@ -294,9 +298,13 @@ impl BatEnemy {
         BatEnemy {
             x,
             y,
+            hp: 1.,
             initial_y: y,
             anims,
-            curr_frame: Some(Rect::new(1., 10., 9., 9.))
+            curr_frame: Some(Rect::new(1., 10., 9., 9.)),
+            active: true,
+            x_dir: direction,
+            clean_timer: Timer::new(10000)
         }
     }
 }
@@ -304,7 +312,7 @@ impl BatEnemy {
 pub fn update_bat_enemies_position(enemies: &mut Vec<BatEnemy>) {
     let delta = get_frame_time();
     for e in enemies.iter_mut() {
-        e.x += 20. * delta;
+        e.x += 20. * delta * e.x_dir;
         e.y = e.initial_y + ((e.x / 10.)).cos() * 25.;
     }
 }
@@ -331,8 +339,11 @@ pub fn update_bat_enemies_colliding(
     enemies: &mut Vec<BatEnemy>, 
     x: &f32, y: &f32, hp: &mut f32, 
     player_inv_timer: &mut Timer,
-    screen_shake_amount: &mut f32) {
-    for e in enemies.iter() {
+    screen_shake_amount: &mut f32,
+    dmg_pop: &mut Vec<DamagePopup>,
+    player_is_dashing: &bool
+) {
+    for e in enemies.iter_mut() {
         let player_pos = Position {
             x: *x,
             y: *y
@@ -341,13 +352,28 @@ pub fn update_bat_enemies_colliding(
             x: e.x,
             y: e.y
         };
-        if player_inv_timer.value() == 1.0 {
+        if player_inv_timer.value() == 1.0 && !player_is_dashing {
             if col(player_pos, enemy_pos, 8.) {
                 println!("colliding with player");
-                // damage_player(hp);
+                damage_player(hp);
                 *screen_shake_amount += 4.0;
                 player_inv_timer.restart();
+
+                if e.hp > 0. {
+                    dmg_pop.push(DamagePopup::new(e.x, e.y, 1));
+                    *screen_shake_amount += 1.0;
+                    e.hp -= 1.;
+                    println!("{}", e.hp);
+                } 
             }
+        }
+    }
+}
+
+pub fn clean_bat_enemies(enemies: &mut Vec<BatEnemy>, x: &f32, y: &f32) {
+    for e in enemies.iter_mut() {
+        if e.clean_timer.finished() {
+            e.active = false;
         }
     }
 }
@@ -367,10 +393,6 @@ impl TowerEnemy {
         TowerEnemy { x, y, bullet_cooldown }
     }
 
-    fn fire_towards_player(&self, player_x: f32, player_y: f32, bullets: Vec<Bullet>) {
-
-    }
-
     pub fn update(&mut self, player_x: f32, player_y: f32, bullets: &mut Vec<Bullet>) {
         if self.bullet_cooldown.finished() {
             let mut _dist= 128.;
@@ -381,11 +403,6 @@ impl TowerEnemy {
             _dist);
             if _d < _dist {
                 _dist= _d;
-                // _dir = get_dir(e.position.x,e.position.y,*x,*y);
-                // let foo = na::Vector2::new(*x, *y);
-                // let bar = na::Vector2::new(e.position.x, e.position.y);
-                // _dir = foo.sub(bar).norm();
-                // println!("{}", _dir);
                 _dir = Vec2::new(self.x, self.y) - Vec2::new(player_x, player_y);
                 if let Some(d) = _dir.try_normalize() {
                     _dir = d;
@@ -421,12 +438,12 @@ pub fn update_enemy_bullets(bullets: &mut Vec<Bullet>, particles: &mut Vec<Parti
 
 pub fn bullet_damage_player(
     bullets: &mut Vec<Bullet>, 
-    // enemies: &mut Vec<Enemies>,
     x: &f32, y: &f32,
-    player_hp: &f32,
+    player_hp: &mut f32,
     dmg_pop: &mut Vec<DamagePopup>,
     screen_shake_amount: &mut f32,
-    // player_dmg: &f32
+    player_inv_timer: &mut Timer,
+    player_is_dashing: &bool
 ) {
     for bullet in bullets.iter_mut() {
         // Collide with enemies
@@ -435,12 +452,16 @@ pub fn bullet_damage_player(
             Position { x: *x + 2., y: *y + 2. }, 
             5.
         ) {
-            if *player_hp > 0. {
+            if *player_hp > 0. && 
+                player_inv_timer.value() == 1.0 &&
+                !player_is_dashing 
+            {
                 bullet.active = false;
-                // dmg_pop.push(DamagePopup::new(e.position.x, e.position.y, player_dmg.abs() as i32));
+                dmg_pop.push(DamagePopup::new(*x, *y, 10));
                 *screen_shake_amount += 1.0;
-                // e.hp -= player_dmg;
-                // println!("{}", e.hp);
+                damage_player(player_hp);
+                *screen_shake_amount += 4.0;
+                player_inv_timer.restart();
             }
         }
     }
