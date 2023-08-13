@@ -91,7 +91,7 @@ impl ParticleType for PlayerDashParticle {
 }
 
 pub fn spawn_particle(particles: &mut Vec<Particle>, x: f32, y: f32, particle_type: Box<dyn ParticleType>) {
-    let mut p = particle_type.new(x, y);
+    let p = particle_type.new(x, y);
     particles.push(p);
 }
 

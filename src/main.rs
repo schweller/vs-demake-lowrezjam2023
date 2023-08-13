@@ -11,6 +11,7 @@ mod damage_popup;
 mod animation;
 mod particles;
 mod player;
+mod stopwatch;
 use crate::tween::Tween;
 use ui::*;
 use timer::Timer;
@@ -20,17 +21,10 @@ use damage_popup::*;
 use animation::Animation;
 use particles::*;
 use player::*;
+use stopwatch::*;
 
 use ::tween::{Tweener, Oscillator, CircInOut};
 
-// Core game loop
-// Start level 1
-// Survive for 3 minutes
-// Go to level 2
-// Survive for 3 minutes
-// Go to level 3
-// Survive for 3 minutes
-// End game
 
 // Spawning enemies
 // - decide where to spawn ✅
@@ -39,7 +33,10 @@ use ::tween::{Tweener, Oscillator, CircInOut};
 // Taking and dealing damage - done but needs refinement ✅
 
 // Scale difficulty
-// - harder to level up
+// - Difficulty tracking ?
+// -- System to update difficulty
+// -- Difficulty increase spawned monsters qty
+// -- Less XP given
 // - harder enemies ✅
 // - more enemies? ✅
 

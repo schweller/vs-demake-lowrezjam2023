@@ -62,11 +62,6 @@ pub fn draw_level_ui(
             ..Default::default()
         } 
     );
-
-    //Player level
-    // draw_text(format!("Level {}", player_level).as_str(), 10., 40., 50., WHITE);
-    // draw_text(format!("Speed {}", player_speed_bonus).as_str(), 10., 80., 50., WHITE);                           
-    // draw_text(format!("Inv {}", player_inv_timer.value()).as_str(), 10., 80., 50., WHITE);
 }
 
 pub fn draw_level_timer_ui(

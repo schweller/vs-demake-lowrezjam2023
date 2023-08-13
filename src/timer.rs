@@ -1,5 +1,4 @@
 use std::time::Duration;
-use std::ops::Sub;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Timer{
@@ -20,10 +19,6 @@ impl Timer{
 			start_time: instant::Instant::now(),
 		}
 	}
-
-	// pub fn advance_by(&mut self, duration: Duration){
-	// 	self.start_time = self.start_time.sub(duration);
-	// }
 
 	pub fn finished(&self) -> bool{
 		let current_time = instant::Instant::now();
