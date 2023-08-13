@@ -10,11 +10,10 @@ pub trait Upgrade {
 
 pub struct SpeedUpgrade {}
 pub struct FireRateUpgrade {}
-pub struct RegenUpgrade {}
-
+pub struct IncreasedRegenUpgrade {}
+pub struct FasterRegenUpgrade {}
 pub struct DashUpgrade {}
 pub struct IframeUpgrade {}
-pub struct PenShotUpgrade {}
 
 fn draw_upgrade_bg(w: f32, h: f32, x: f32, y: f32) {
     draw_rectangle(
@@ -90,7 +89,7 @@ impl Upgrade for FireRateUpgrade {
     }  
 }
 
-impl Upgrade for RegenUpgrade {
+impl Upgrade for IncreasedRegenUpgrade {
     fn get_name(&self) -> &'static str {
         "Recovery"
     }
@@ -107,9 +106,108 @@ impl Upgrade for RegenUpgrade {
             TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
         );
         draw_text_ex(
-            "Regen",
+            "Inc.",
             x, 
             y+50., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Regen",
+            x, 
+            y+100., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+    }  
+}
+
+impl Upgrade for DashUpgrade {
+    fn get_name(&self) -> &'static str {
+        "Dash"
+    }
+    fn draw(&self, font: Font, x: f32, y: f32, highlighted: bool) {
+        let mut font_color = self.get_color();
+        if highlighted {
+            font_color = WHITE;
+        }
+        draw_upgrade_bg(180., 180., x, y);  
+        draw_text_ex(
+            "+5%",
+            x, 
+            y, 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Fast",
+            x, 
+            y+50., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Dash",
+            x, 
+            y+100., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+    }  
+}
+
+impl Upgrade for FasterRegenUpgrade {
+    fn get_name(&self) -> &'static str {
+        "FasterRecovery"
+    }
+    fn draw(&self, font: Font, x: f32, y: f32, highlighted: bool) {
+        let mut font_color = self.get_color();
+        if highlighted {
+            font_color = WHITE;
+        }
+        draw_upgrade_bg(180., 180., x, y);  
+        draw_text_ex(
+            "+5%",
+            x, 
+            y, 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Fast",
+            x, 
+            y+50., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Regen",
+            x, 
+            y+100., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+    }  
+}
+
+impl Upgrade for IframeUpgrade {
+    fn get_name(&self) -> &'static str {
+        "MoreIframes"
+    }
+    fn draw(&self, font: Font, x: f32, y: f32, highlighted: bool) {
+        let mut font_color = self.get_color();
+        if highlighted {
+            font_color = WHITE;
+        }
+        draw_upgrade_bg(180., 180., x, y);  
+        draw_text_ex(
+            "+10%",
+            x, 
+            y, 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Inv.",
+            x, 
+            y+50., 
+            TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
+        );
+        draw_text_ex(
+            "Timer",
+            x, 
+            y+100., 
             TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., color: font_color, ..Default::default()}
         );
     }  
@@ -119,8 +217,7 @@ pub fn pick_random_upgrades() -> Vec<Box<dyn Upgrade>> {
     let mut upgrades : Vec<Box<dyn Upgrade>> = Vec::new();
     
     upgrades.push(Box::new(FireRateUpgrade{}));
-    // upgrades.push(Box::new(SpeedUpgrade{}));
-    upgrades.push(Box::new(RegenUpgrade{}));
+    upgrades.push(Box::new(IframeUpgrade{}));
 
     upgrades
 }

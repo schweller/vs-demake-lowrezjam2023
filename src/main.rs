@@ -33,20 +33,25 @@ use ::tween::{Tweener, Oscillator, CircInOut};
 // End game
 
 // Spawning enemies
-// - decide where to spawn
-// - spawn 
-// - fix spawning to compensate for bottom UI - prob not being able to done
+// - decide where to spawn ✅
+// - spawn ✅
 
-// Taking and dealing damage - done but needs refinement
+// Taking and dealing damage - done but needs refinement ✅
 
 // Scale difficulty
 // - harder to level up
-// - harder enemies
-// - more enemies?
+// - harder enemies ✅
+// - more enemies? ✅
 
 // Level up
-// - Change state - done
-// - Render upgrade choices - done
+// - Change state - ✅
+// - Render upgrade choices - ✅
+// - Apply upgrades ✅
+
+// Upgrade choices
+// - Player Speed ✅
+// - Bullet spawn rate ✅
+// - HP Recovery rate ✅
 
 // Juicing
 // - screen shake ✅
@@ -57,12 +62,6 @@ use ::tween::{Tweener, Oscillator, CircInOut};
 
 // Improve collision
 // Collision avoidance?
-
-// Upgrade choices
-// - Player Speed
-// - Bullet spawn rate
-// - HP Recovery rate
-// - Companion (1-off)
 
 const PLAYER_SPEED: f32 = 10.;
 
@@ -464,6 +463,8 @@ async fn main() {
     let mut current_player_xp_percentage;
     let mut player_flip_x: bool = false;
     let mut player_speed_bonus = 1.;
+    let mut player_regen = 1.;
+    let mut player_regen_timer = Timer::new(5000);
     let mut player_inv_timer = Timer::new(1800);
     let player_damage = 2.;
 
@@ -550,6 +551,7 @@ async fn main() {
     let mut player_is_dashing = false;
     let mut player_direction = None;
     let mut dashing_timer = Timer::new(500);
+    let mut dash_speed = 40.0;
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -586,6 +588,7 @@ async fn main() {
                     }
                 }
 
+                // Move and Dashing input block
                 if is_key_pressed(KeyCode::A) && !player_is_dashing {
                     player_direction = get_direction();
                     if let Some(_dir) = player_direction {
@@ -604,8 +607,8 @@ async fn main() {
                     );
                 }
 
+                // Update block
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
-
                 update_enemies_pushing(&mut enemies);
                 update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &player_is_dashing, &mut player_inv_timer, &mut screen_shake_amount);
                 update_bat_enemies_position(&mut bat_enemies);
@@ -622,14 +625,11 @@ async fn main() {
 
                 update_tower_enemies(&mut tower_enemies, &player_pos_x, &player_pos_y, &mut enemy_bullets);
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
-
                 update_bullets(&mut bullets, &mut particles);
                 update_enemy_bullets(&mut enemy_bullets, &mut particles, delta);
                 update_particles(&mut particles);
                 
-                if player_is_dashing {
-                    let dash_speed = 60.0;
-        
+                if player_is_dashing {        
                     // Calculate the dash distance based on the dash speed and delta time
                     let dash_distance = dash_speed * delta;
         
@@ -673,7 +673,7 @@ async fn main() {
 
                 let player_frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
                 
-                // Draw functions
+                // Draw block
                 draw_particles(&mut particles);
                 // player.draw(player_texture, frame);
                 draw_player(
@@ -750,7 +750,14 @@ async fn main() {
                     );
                 }
 
-                // Count Towers
+                if player_regen_timer.finished() {
+                    if player_hp + player_regen >= player_max_hp {
+                        player_hp = player_max_hp
+                    } else {
+                        player_hp += player_regen;
+                    }
+                    player_regen_timer.restart();
+                }
  
                 damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &mut screen_shake_amount, &player_damage);
                 bullet_damage_player(&mut enemy_bullets, &player_pos_x, &player_pos_y, &mut player_hp, &mut damage_popups, &mut screen_shake_amount, &mut player_inv_timer, &player_is_dashing);
@@ -768,6 +775,8 @@ async fn main() {
                     bullet_cooldown.set_duration_millis(((3000 as f32) * current_bullet_cooldown_bonus) as u64);
                     bullet_cooldown.restart();
                 }
+
+                // println!("{} regen_dur", player_regen_timer.duration.as_millis());
         
                 // Get rid of things that shouldn't be around anymore
                 // Bullets, enemies, particles, pop-ups
@@ -866,7 +875,25 @@ async fn main() {
                             println!("FireRate upgrade");
                         }
                         "Recovery" => {
+                            player_regen += 2.;
                             println!("Recovery upgrade");
+                        }
+                        "FasterRecovery" => {
+                            let dur = player_regen_timer.duration;
+                            let dur_5_percent = (player_regen_timer.duration.as_millis() as f32) * 0.05;
+                            // println!("recovery {} new recovery {}, 5percent {}", dur.as_millis(), (dur.as_millis() - (dur_5_percent.round() as u128)), dur_5_percent);
+                            player_regen_timer.set_duration_millis((dur.as_millis() - (dur_5_percent.round() as u128)) as u64);
+                        }
+                        "Dash" => {
+                            let dash_5_percent = dash_speed * 0.05;
+                            dash_speed += dash_5_percent;
+                            println!("{}", dash_speed);
+                        },
+                        "MoreIframes" => {
+                            let dur = player_inv_timer.duration;
+                            let extra = (player_inv_timer.duration.as_millis() as f32) * 0.1;
+                            // println!("recovery {} new recovery {}, 5percent {}", dur.as_millis(), (dur.as_millis() + (extra.round() as u128)), extra);
+                            player_inv_timer.set_duration_millis((dur.as_millis() + (extra.round() as u128)) as u64);
                         }
                         _ => {}
                     }

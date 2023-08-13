@@ -156,7 +156,7 @@ pub fn draw_level_up(
 ) {
     // Level UP UI
     tween.update();
-    draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.5));
+    draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(0., 0., 0., 0.8));
     for (i, upgrade) in available_upgrades.iter().enumerate() {
         let delta = get_frame_time();
         let f = i as f32;
