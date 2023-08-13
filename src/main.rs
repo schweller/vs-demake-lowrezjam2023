@@ -10,6 +10,7 @@ mod enemies;
 mod damage_popup;
 mod animation;
 mod particles;
+mod player;
 use crate::tween::Tween;
 use ui::*;
 use timer::Timer;
@@ -18,6 +19,7 @@ use enemies::*;
 use damage_popup::*;
 use animation::Animation;
 use particles::*;
+use player::*;
 
 use ::tween::{Tweener, Oscillator, CircInOut};
 
@@ -239,7 +241,7 @@ fn update_bullets(bullets: &mut Vec<Bullet>, particles: &mut Vec<Particle>) {
         if bullet.active {
             bullet.x -= bullet.dir_x * delta * 20.; 
             bullet.y -= bullet.dir_y * delta * 20.;
-            spawn_particle(particles, bullet.x, bullet.y);
+            spawn_particle(particles, bullet.x, bullet.y, Box::new(ShotParticle{}));
         }
     }
 }
@@ -318,8 +320,7 @@ pub fn axis(negative: bool, positive: bool) -> f32 {
     ((positive as i8) - (negative as i8)) as f32
 }
 
-fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, particles: &mut Vec<Particle>) {
-    let delta = get_frame_time();
+fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, particles: &mut Vec<Particle>, delta: f32) {
     let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
     let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
     let magnitude = (a.powi(2) + b.powi(2)).sqrt();
@@ -328,7 +329,7 @@ fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, particl
     if a != 0. || b != 0. {
         *x += foo_x * delta * PLAYER_SPEED * speed;
         *y -= foo_y * delta * PLAYER_SPEED * speed;
-        spawn_particle(particles, *x+4., *y+5.);
+        // spawn_particle(particles, *x+4., *y+5.);
     }
 
     if a == -1. { *flip_x = true }
@@ -440,14 +441,16 @@ async fn main() {
     slime_texture.set_filter(FilterMode::Nearest);
 
     // Player definitions
+    let mut player = Player::new(64., 64.);
+
     let mut player_pos_x = 64.;
     let mut player_pos_y = 64.;
     let player_max_hp = 100.;
     let mut player_hp : f32 = player_max_hp;
-    let mut current_player_hp_percentage; 
     let mut player_max_xp = 100.;
     let mut player_xp = 1.;
     let mut player_level = 1;
+    let mut current_player_hp_percentage; 
     let mut current_player_xp_percentage;
     let mut player_flip_x: bool = false;
     let mut player_speed_bonus = 1.;
@@ -556,7 +559,6 @@ async fn main() {
                 camera_zoom / 640. * 2., 
                 -camera_zoom / 640. * 2.
             ),
-            // rotation: (camera_target_angle - camera_angle) * t + camera_angle,
             ..Default::default()
         });
 
@@ -570,10 +572,9 @@ async fn main() {
                         draw_map_cell(main_texture, x, y);
                     }
                 }
-        
-                player_direction = get_direction();
 
                 if is_key_pressed(KeyCode::A) && !is_dashing {
+                    player_direction = get_direction();
                     if let Some(_dir) = player_direction {
                         dashing_timer.restart();
                         is_dashing = true;
@@ -581,12 +582,19 @@ async fn main() {
                 }
 
                 if !is_dashing {
-                    move_player(&mut player_pos_x, &mut player_pos_y, &mut player_flip_x, &player_speed_bonus, &mut particles);
+                    // player.move_me(delta);
+                    move_player(
+                        &mut player_pos_x, 
+                        &mut player_pos_y, 
+                        &mut player_flip_x, 
+                        &player_speed_bonus, 
+                        &mut particles,
+                        delta
+                    );
                 }
 
-                // println!("{}", is_dashing);
-
                 update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
+
                 update_enemies_pushing(&mut enemies);
                 update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &mut player_inv_timer, &mut screen_shake_amount);
                 update_bat_enemies_position(&mut bat_enemies);
@@ -596,8 +604,6 @@ async fn main() {
 
                 update_bullets(&mut bullets, &mut particles);
                 update_particles(&mut particles);
-
-                let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
                 
                 if is_dashing {
                     // Determine the dash speed (you can adjust this value)
@@ -608,6 +614,7 @@ async fn main() {
                     println!("{} dash_dist", dash_distance);
         
                     // Update player position based on dash direction
+                    // 0.7071 was pure experimentation
                     match player_direction {
                         Some(Direction::Up) => player_pos_y -= dash_distance,
                         Some(Direction::Down) => player_pos_y += dash_distance,
@@ -632,7 +639,12 @@ async fn main() {
                         None => {}
                     }
 
-                    spawn_particle(&mut particles, player_pos_x+4., player_pos_y+4.);
+                    spawn_particle(
+                        &mut particles, 
+                        player_pos_x, 
+                        player_pos_y,
+                        Box::new(PlayerDashParticle{ texture: player_texture})
+                    );
         
                     // Perform collision detection and adjust position if needed
                     // (You'll need to implement collision detection logic here)
@@ -642,17 +654,15 @@ async fn main() {
                     if dashing_timer.finished() {
                         is_dashing = false;
                     }
-                } else {
-                    last_pos_x = player_pos_x;
-                    last_pos_y = player_pos_y;
                 }
 
+                let player_frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
                 // Draw functions
                 draw_particles(&mut particles);
-
+                // player.draw(player_texture, frame);
                 draw_player(
                     player_texture,
-                    frame, 
+                    player_frame, 
                     &mut player_pos_x, 
                     &mut player_pos_y, 
                     &player_flip_x, 

@@ -1,4 +1,4 @@
-use macroquad::prelude::*;
+use macroquad::{prelude::*};
 
 use crate::timer::Timer;
 
@@ -12,7 +12,12 @@ pub struct Particle {
     color_end: Color,
     x: f32,
     y: f32,
+    texture: Option<Texture2D>,
     pub active: bool
+}
+
+pub trait ParticleType {
+    fn new(&self, x: f32, y: f32) -> Particle;
 }
 
 impl Default for Particle {
@@ -20,7 +25,7 @@ impl Default for Particle {
         Particle { 
             lifetime: Timer::new(500), 
             velocity_start: vec2(5., 0.), 
-            velocity_end: vec2(5., 0.), 
+            velocity_end: vec2(5., 0.),
             size_start: 1.5 + (rand::gen_range(0.5, 1.) - 0.5), 
             size_end: 0.2 + (rand::gen_range(0.5, 1.) - 0.5), 
             // color_start: Color::new(1., 0.35, 0.0, 1.),
@@ -28,27 +33,49 @@ impl Default for Particle {
             color_end: Color::new(0.2, 0.2, 0.2, 0.1), 
             x: 50., 
             y: 50.,
+            texture: None,
             active: true
         }
     }
 }
 
-pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
-    a * (1.0 - t) + b * t
-}
+pub struct ShotParticle {}
 
-pub fn lerp_vec2(a: Vec2, b: Vec2, t: f32) -> Vec2 {
-    a * (1.0 - t) + b * t
-}
-
-pub fn spawn_particle(particles: &mut Vec<Particle>, x: f32, y: f32) {
-    particles.push(
-        Particle {
-            x: x + (rand::gen_range(0.5, 1.) - 0.5) * 2.,
-            y: y + (rand::gen_range(0.5, 1.) - 0.5) * 2.,
+impl ParticleType for ShotParticle {
+    fn new(&self, x: f32, y: f32) -> Particle {
+        let mut particle = Particle {
             ..Default::default()
-        }
-    )
+        };
+        particle.x = x + (rand::gen_range(0.5, 1.) - 0.5) * 2.;
+        particle.y = y + (rand::gen_range(0.5, 1.) - 0.5) * 2.;
+
+        particle        
+    }
+}
+
+pub struct PlayerDashParticle {
+    pub texture: Texture2D
+}
+
+impl ParticleType for PlayerDashParticle {
+    fn new(&self, x: f32, y: f32) -> Particle {
+        let mut particle = Particle {
+            ..Default::default()
+        };
+        particle.velocity_start = vec2(1., 0.); 
+        particle.velocity_end = vec2(1., 0.);
+        
+        particle.x = x + (rand::gen_range(0.5, 1.) - 0.5) * 0.5;
+        particle.y = y + (rand::gen_range(0.5, 1.) - 0.5) * 0.5;
+        particle.texture = Some(self.texture);
+
+        particle        
+    }
+}
+
+pub fn spawn_particle(particles: &mut Vec<Particle>, x: f32, y: f32, particle_type: Box<dyn ParticleType>) {
+    let mut p = particle_type.new(x, y);
+    particles.push(p);
 }
 
 pub fn update_particles(particles: &mut Vec<Particle>) {
@@ -70,9 +97,23 @@ pub fn draw_particles(particles: &mut Vec<Particle>) {
     for particle in particles.iter() {
         if particle.active {
             let elapsed = particle.lifetime.elapsed().as_secs_f32() / particle.lifetime.duration.as_secs_f32();
-            let size = lerp(particle.size_start, particle.size_end, elapsed);
-            let color = lerp_color(particle.color_start, particle.color_end, elapsed);
-            draw_rectangle(particle.x, particle.y, size, size, color);
+            if let Some(texture) = particle.texture {
+                let color = lerp_color(particle.color_start, particle.color_end, elapsed);
+                draw_texture_ex(
+                    texture, 
+                    particle.x,
+                    particle.y,
+                    color,
+            DrawTextureParams { 
+                        dest_size: Some(vec2(8., 8.)), 
+                        source: Some(Rect::new(1., 1., 9., 9.)),
+                    ..Default::default()
+                });
+            }  else {
+                let size = lerp(particle.size_start, particle.size_end, elapsed);
+                let color = lerp_color(particle.color_start, particle.color_end, elapsed);
+                draw_rectangle(particle.x, particle.y, size, size, color);
+            }
         }
     }
 }
@@ -86,4 +127,10 @@ fn lerp_color(a: Color, b: Color, t: f32) -> Color {
     )
 }
 
+pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a * (1.0 - t) + b * t
+}
 
+pub fn lerp_vec2(a: Vec2, b: Vec2, t: f32) -> Vec2 {
+    a * (1.0 - t) + b * t
+}
