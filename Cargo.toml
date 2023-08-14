@@ -8,10 +8,12 @@ edition = "2021"
 [dependencies]
 macroquad = { version = "0.3.11" }
 macroquad-particles = { version = "0.1.2" }
+quad-rand = { version = "0.2.1", features = ["rand"] }
 # rand = "0.8.4"
-# getrandom = { version = "0.2", features = ["js"] }
-instant = { version = "0.1", features = [ "inaccurate" ] }
+getrandom = { version = "0.2", features = ["js"] }
+instant = { version = "0.1" }
 keyframe = { version = "1.1" }
 keyframe_derive = { version = "1.0" }
 stopwatch-rs = "0.1.0"
 tween = "2.0.1"
+nanorand = { version= "0.7.0" }

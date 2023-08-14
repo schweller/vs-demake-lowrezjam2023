@@ -25,7 +25,6 @@ use stopwatch::*;
 
 use ::tween::{Tweener, Oscillator, CircInOut};
 
-
 // Spawning enemies
 // - decide where to spawn ✅
 // - spawn ✅
@@ -273,7 +272,7 @@ fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &
     for e in enemies.iter_mut() {
         if e.hp <= 0. { 
             e.alive = false;
-            *player_xp += 5.;
+            *player_xp += e.get_given_xp();
             let dead_enemy_obj = DeadEnemy::new(e.position.x, e.position.y, e.curr_frame);
             dead_enemies.push(dead_enemy_obj);
         }
@@ -539,16 +538,17 @@ async fn main() {
     );
     let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
     let mut looper = Tweener::new(0., 10., 1.5, Oscillator::new(CircInOut));
-
-    let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut sw = stopwatch_rs::StopWatch::start();
-
+    
+    let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut screen_shake_amount: f32 = 0.;
 
     let mut player_is_dashing = false;
     let mut player_direction = None;
     let mut dashing_timer = Timer::new(500);
     let mut dash_speed = 40.0;
+
+    let mut progression = 1.0;
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -714,7 +714,6 @@ async fn main() {
                 }
 
                 // Count Bats
-                println!("bats {}", bat_enemies.len());
                 if bat_enemies.len() < 5 {
                     let x_dir: f32;
                     match rand::gen_range(0, 2) {

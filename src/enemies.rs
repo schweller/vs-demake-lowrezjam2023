@@ -7,17 +7,6 @@ use macroquad::prelude::*;
 use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup, Direction};
 use super::{col, get_dir_, dist};
 
-#[derive(Clone)]
-pub struct Enemies {
-    pub position: Position,
-    pub collider: Collider,
-    pub alive: bool,
-    pub hp: f32,
-    pub tween: Tween,
-    pub anims: HashMap<String, Animation>,
-    pub curr_frame: Option<Rect>
-}
-
 pub struct DeadEnemy {
     pub position: Position,
     pub move_tween: Tween,
@@ -51,7 +40,23 @@ impl DeadEnemy {
     }
 }
 
+#[derive(Clone)]
+pub struct Enemies {
+    pub position: Position,
+    pub collider: Collider,
+    pub alive: bool,
+    pub hp: f32,
+    pub tween: Tween,
+    pub anims: HashMap<String, Animation>,
+    pub curr_frame: Option<Rect>,
+    given_xp: f32
+}
+
 impl Enemies {
+    pub fn get_given_xp(&self) -> f32 {
+        self.given_xp
+    }
+
     pub fn new(x: f32, y: f32) -> Self {
         let tween = Tween::from_keyframes(
             vec![
@@ -98,7 +103,8 @@ impl Enemies {
             alive: true,
             tween,
             anims,
-            curr_frame: Some(Rect::new(1., 1., 9., 9.))
+            curr_frame: Some(Rect::new(1., 1., 9., 9.)),
+            given_xp: 10.
         }
     }
 }
