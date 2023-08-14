@@ -214,6 +214,7 @@ impl Upgrade for IframeUpgrade {
     }  
 }
 
+#[derive(Clone)]
 enum PossibleUpgrades {
     SpeedUpgrade,
     FireRateUpgrade,
@@ -226,81 +227,76 @@ enum PossibleUpgrades {
 pub fn pick_random_upgrades() -> Vec<Box<dyn Upgrade>> {
     let mut upgrades : Vec<Box<dyn Upgrade>> = Vec::new();
 
-    // let mut rng = nanorand::tls_rng();
+    let mut gen = randomize::PCG32::seed(miniquad::date::now() as _, miniquad::date::now() as _);
 
-    // let index1 = rng.generate_range(1..7);
-    // let mut index2 = rng.generate_range(1..7);
-    // while index2 == index1 {
-    //     index2 = rng.generate_range(1..7);
-    // }
+    let index1 = randomize::RandRangeU32::new(0, 5).sample(&mut gen);
+    let mut index2 = randomize::RandRangeU32::new(0, 5).sample(&mut gen);
+    while index2 == index1 {
+        index2 = randomize::RandRangeU32::new(0, 5).sample(&mut gen);
+    }
 
-    // println!("{} {}", index1, index2);
+    // Get the enum variants based on the indices
+    let item1 = match index1 {
+        0 => PossibleUpgrades::SpeedUpgrade,
+        1 => PossibleUpgrades::DashUpgrade,
+        2 => PossibleUpgrades::FasterRegenUpgrade,
+        3 => PossibleUpgrades::IframeUpgrade,
+        4 => PossibleUpgrades::IncreasedRegenUpgrade,
+        5 => PossibleUpgrades::FireRateUpgrade,
+        _ => PossibleUpgrades::FireRateUpgrade,
+    };
 
-    // // Get the enum variants based on the indices
-    // let item1 = match index1 {
-    //     0 => PossibleUpgrades::SpeedUpgrade,
-    //     1 => PossibleUpgrades::DashUpgrade,
-    //     2 => PossibleUpgrades::FasterRegenUpgrade,
-    //     3 => PossibleUpgrades::IframeUpgrade,
-    //     4 => PossibleUpgrades::IncreasedRegenUpgrade,
-    //     5 => PossibleUpgrades::FireRateUpgrade,
-    //     _ => PossibleUpgrades::FireRateUpgrade,
-    // };
+    let item2 = match index2 {
+        0 => PossibleUpgrades::SpeedUpgrade,
+        1 => PossibleUpgrades::DashUpgrade,
+        2 => PossibleUpgrades::IncreasedRegenUpgrade,
+        3 => PossibleUpgrades::FasterRegenUpgrade,
+        4 => PossibleUpgrades::IframeUpgrade,
+        5 => PossibleUpgrades::FireRateUpgrade,
+        _ => PossibleUpgrades::FireRateUpgrade,
+    };
 
-    // let item2 = match index2 {
-    //     0 => PossibleUpgrades::SpeedUpgrade,
-    //     1 => PossibleUpgrades::DashUpgrade,
-    //     2 => PossibleUpgrades::IncreasedRegenUpgrade,
-    //     3 => PossibleUpgrades::FasterRegenUpgrade,
-    //     4 => PossibleUpgrades::IframeUpgrade,
-    //     5 => PossibleUpgrades::FireRateUpgrade,
-    //     _ => PossibleUpgrades::FireRateUpgrade,
-    // };
+    match item1 {
+        PossibleUpgrades::DashUpgrade => {
+            upgrades.push(Box::new(DashUpgrade{}));
+        }
+        PossibleUpgrades::SpeedUpgrade => {
+            upgrades.push(Box::new(SpeedUpgrade{}));
+        }
+        PossibleUpgrades::FasterRegenUpgrade => {
+            upgrades.push(Box::new(FasterRegenUpgrade{}));
+        }
+        PossibleUpgrades::IncreasedRegenUpgrade => {
+            upgrades.push(Box::new(IncreasedRegenUpgrade{}));
+        }
+        PossibleUpgrades::IframeUpgrade => {
+            upgrades.push(Box::new(DashUpgrade{}));
+        }
+        PossibleUpgrades::FireRateUpgrade => {
+            upgrades.push(Box::new(FireRateUpgrade{}));
+        }                                        
+    }
 
-    // match item1 {
-    //     PossibleUpgrades::DashUpgrade => {
-    //         upgrades.push(Box::new(DashUpgrade{}));
-    //     }
-    //     PossibleUpgrades::SpeedUpgrade => {
-    //         upgrades.push(Box::new(SpeedUpgrade{}));
-    //     }
-    //     PossibleUpgrades::FasterRegenUpgrade => {
-    //         upgrades.push(Box::new(FasterRegenUpgrade{}));
-    //     }
-    //     PossibleUpgrades::IncreasedRegenUpgrade => {
-    //         upgrades.push(Box::new(IncreasedRegenUpgrade{}));
-    //     }
-    //     PossibleUpgrades::IframeUpgrade => {
-    //         upgrades.push(Box::new(DashUpgrade{}));
-    //     }
-    //     PossibleUpgrades::FireRateUpgrade => {
-    //         upgrades.push(Box::new(FireRateUpgrade{}));
-    //     }                                        
-    // }
-
-    // match item2 {
-    //     PossibleUpgrades::DashUpgrade => {
-    //         upgrades.push(Box::new(DashUpgrade{}));
-    //     }
-    //     PossibleUpgrades::SpeedUpgrade => {
-    //         upgrades.push(Box::new(SpeedUpgrade{}));
-    //     }
-    //     PossibleUpgrades::FasterRegenUpgrade => {
-    //         upgrades.push(Box::new(FasterRegenUpgrade{}));
-    //     }
-    //     PossibleUpgrades::IncreasedRegenUpgrade => {
-    //         upgrades.push(Box::new(IncreasedRegenUpgrade{}));
-    //     }
-    //     PossibleUpgrades::IframeUpgrade => {
-    //         upgrades.push(Box::new(DashUpgrade{}));
-    //     }
-    //     PossibleUpgrades::FireRateUpgrade => {
-    //         upgrades.push(Box::new(FireRateUpgrade{}));
-    //     }                                        
-    // }    
-
-    upgrades.push(Box::new(FireRateUpgrade{}));
-    upgrades.push(Box::new(DashUpgrade{}));
+    match item2 {
+        PossibleUpgrades::DashUpgrade => {
+            upgrades.push(Box::new(DashUpgrade{}));
+        }
+        PossibleUpgrades::SpeedUpgrade => {
+            upgrades.push(Box::new(SpeedUpgrade{}));
+        }
+        PossibleUpgrades::FasterRegenUpgrade => {
+            upgrades.push(Box::new(FasterRegenUpgrade{}));
+        }
+        PossibleUpgrades::IncreasedRegenUpgrade => {
+            upgrades.push(Box::new(IncreasedRegenUpgrade{}));
+        }
+        PossibleUpgrades::IframeUpgrade => {
+            upgrades.push(Box::new(DashUpgrade{}));
+        }
+        PossibleUpgrades::FireRateUpgrade => {
+            upgrades.push(Box::new(FireRateUpgrade{}));
+        }                                        
+    }    
 
     upgrades
 }

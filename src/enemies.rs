@@ -57,7 +57,7 @@ impl Enemies {
         self.given_xp
     }
 
-    pub fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32, given_xp: f32) -> Self {
         let tween = Tween::from_keyframes(
             vec![
                 Keyframe::new(0.0, 0.0, EaseOut),
@@ -104,7 +104,7 @@ impl Enemies {
             tween,
             anims,
             curr_frame: Some(Rect::new(1., 1., 9., 9.)),
-            given_xp: 10.
+            given_xp
         }
     }
 }
@@ -241,7 +241,7 @@ pub fn draw_enemies_collider(enemies: &mut Vec<Enemies>) {
     }
 }
 
-pub fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &f32) {
+pub fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_y: &f32, given_xp: f32) {
     // get a random position away from the player
     // add an enemy to that position
     let direction = rand::gen_range(-1, 2) as f32;
@@ -257,7 +257,7 @@ pub fn spawn_enemies(enemies: &mut Vec<Enemies>, player_pos_x: &f32, player_pos_
     let x = player_pos_x + direction.cos() * _rad * random;
     let y = player_pos_y + direction.sin() * _rad * random;
 
-    enemies.push(Enemies::new(x, y));
+    enemies.push(Enemies::new(x, y, given_xp));
 }
 
 pub struct BatEnemy {
@@ -269,20 +269,12 @@ pub struct BatEnemy {
     pub hp: f32,
     pub active: bool,
     pub x_dir: f32,
-    pub clean_timer: Timer
+    pub clean_timer: Timer,
+    pub given_xp: f32,
 }
 
 impl BatEnemy {
-    pub fn new(x: f32, y: f32, direction: f32) -> Self {
-        // let tween = Tween::from_keyframes(
-        //     vec![
-        //         Keyframe::new(0.0, 0.0, EaseOut),
-        //         Keyframe::new(20.0, 0.2, EaseOut),
-        //     ],
-        //     0,
-        //     1,
-        //     false,
-        // );
+    pub fn new(x: f32, y: f32, direction: f32, given_xp: f32) -> Self {
         let mut idle_state_rects : Vec<Rect> = Vec::new();
         idle_state_rects.push(Rect::new(1., 10., 9., 9.));
         idle_state_rects.push(Rect::new(10., 10., 9., 9.));
@@ -310,7 +302,8 @@ impl BatEnemy {
             curr_frame: Some(Rect::new(1., 10., 9., 9.)),
             active: true,
             x_dir: direction,
-            clean_timer: Timer::new(10000)
+            clean_timer: Timer::new(10000),
+            given_xp
         }
     }
 }
@@ -388,15 +381,15 @@ pub struct TowerEnemy {
     pub x: f32,
     pub y: f32,
     pub bullet_cooldown: Timer,
-    // pub initial_y: f32,
-    // pub anims: HashMap<String, Animation>,
-    // pub curr_frame: Option<Rect>
+    pub activity_cooldown: Timer,
+    pub active: bool
 }
 
 impl TowerEnemy {
     pub fn new(x: f32, y: f32) -> Self {
         let bullet_cooldown = Timer::new(1000);
-        TowerEnemy { x, y, bullet_cooldown }
+        let activity_cooldown = Timer::new(5000);
+        TowerEnemy { x, y, bullet_cooldown, activity_cooldown, active: true }
     }
 
     pub fn update(&mut self, player_x: f32, player_y: f32, bullets: &mut Vec<Bullet>) {
@@ -417,12 +410,27 @@ impl TowerEnemy {
             bullets.push(Bullet { x: self.x + 2., y: self.y + 2., dir_x: _dir.x, dir_y: _dir.y, active: true });
             self.bullet_cooldown.restart();         
         }
+
+        if self.activity_cooldown.finished() {
+            self.active = false;
+        }
     }
 }
 
 pub fn draw_tower_enemies(texture: Texture2D, enemies: &mut Vec<TowerEnemy>) {
     for e in enemies.iter() {
-        draw_rectangle(e.x, e.y, 4., 4., WHITE);
+        if e.active {
+            draw_texture_ex(
+                texture, 
+                e.x,
+                e.y,
+                WHITE,
+        DrawTextureParams { 
+                    dest_size: Some(vec2(9., 9.)), 
+                    source: Some(Rect::new(1., 20., 9., 9.)),
+                ..Default::default()
+            });  
+        }
     }
 }
 
@@ -480,7 +488,7 @@ pub fn draw_enemy_bullets(texture: Texture2D, bullets: &mut Vec<Bullet>) {
                 texture, 
                 bullet.x,
                 bullet.y, 
-                WHITE,
+                PINK,
         DrawTextureParams { 
                     dest_size: Some(vec2(8., 8.)), 
                     source: Some(Rect::new(

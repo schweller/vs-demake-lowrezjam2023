@@ -268,22 +268,26 @@ fn damage_enemy(
     }
 }
 
-fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &mut Vec<DeadEnemy>) {
+fn kill_enemies(enemies: &mut Vec<Enemies>, player_xp: &mut f32, dead_enemies: &mut Vec<DeadEnemy>, kill_count: &mut i32, progression: &mut f32, base_given_xp: &mut f32) {
     for e in enemies.iter_mut() {
         if e.hp <= 0. { 
             e.alive = false;
             *player_xp += e.get_given_xp();
+            *kill_count += 1;
+            update_progress_level(progression, *kill_count);
             let dead_enemy_obj = DeadEnemy::new(e.position.x, e.position.y, e.curr_frame);
             dead_enemies.push(dead_enemy_obj);
         }
     }
 }
 
-fn kill_bat_enemies(enemies: &mut Vec<BatEnemy>, player_xp: &mut f32, dead_enemies: &mut Vec<DeadEnemy>) {
+fn kill_bat_enemies(enemies: &mut Vec<BatEnemy>, player_xp: &mut f32, dead_enemies: &mut Vec<DeadEnemy>, kill_count: &mut i32, progression: &mut f32, base_given_xp: &mut f32) {
     for e in enemies.iter_mut() {
         if e.hp <= 0. { 
             e.active = false;
-            *player_xp += 5.;
+            *player_xp += e.given_xp;
+            *kill_count += 1;
+            update_progress_level(progression, *kill_count);
             let dead_enemy_obj = DeadEnemy::new(e.x, e.y, e.curr_frame);
             dead_enemies.push(dead_enemy_obj);
         }
@@ -357,6 +361,7 @@ fn move_player(x: &mut f32, y: &mut f32, flip_x: &mut bool, speed: &f32, delta: 
 }
 
 enum LevelState {
+    PreGame,
     LevelUp,
     InGame,
     StageCleared
@@ -423,6 +428,18 @@ pub fn get_direction() -> Option<Direction> {
     }
 }
 
+pub fn update_progress_level(progression: &mut f32, kill_count: i32) {
+    println!(" rem {}", kill_count.rem_euclid(15));
+     if kill_count > 0 && kill_count.rem_euclid(15) == 0 {
+        *progression += 1.0;
+     }
+}
+
+pub fn update_given_xp(base_given_xp: &mut f32, kill_count: i32) {
+    let b = *base_given_xp;
+    *base_given_xp -= (0.1 * (b)) - (0.2 * (kill_count as f32))
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
     // let min_camera_zoom = 1.3;
@@ -444,12 +461,14 @@ async fn main() {
     player_texture.set_filter(FilterMode::Nearest);
     let slime_texture = load_texture("assets/vs-dx-enemies-atlas.png").await.unwrap();
     slime_texture.set_filter(FilterMode::Nearest);
+    let main_title_texture = load_texture("assets/vs-dx-maintitle-atlas.png").await.unwrap();
+    main_title_texture.set_filter(FilterMode::Nearest);
 
     // Player definitions
     let mut player = Player::new(64., 64.);
 
-    let mut player_pos_x = 64.;
-    let mut player_pos_y = 64.;
+    let mut player_pos_x = 128.;
+    let mut player_pos_y = 128.;
     let player_max_hp = 100.;
     let mut player_hp : f32 = player_max_hp;
     let mut player_max_xp = 100.;
@@ -494,7 +513,7 @@ async fn main() {
 
     let mut particles: Vec<Particle> = Vec::new();
 
-    let max_b_cooldown = Timer::new(1000);
+    let max_b_cooldown = Timer::new(700);
     let mut bullet_cooldown = max_b_cooldown;
     let mut current_bullet_cooldown_bonus = 1.0;
 
@@ -503,7 +522,7 @@ async fn main() {
 
     let mut enemy_bullets: Vec<Bullet> = Vec::new();
 
-    let mut level_state = LevelState::LevelUp;
+    let mut level_state = LevelState::PreGame;
 
     // let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
     let mut upgrades: Vec<Box<dyn Upgrade>> = pick_random_upgrades();
@@ -548,7 +567,14 @@ async fn main() {
     let mut dashing_timer = Timer::new(500);
     let mut dash_speed = 40.0;
 
+    // Progression
+    // 1 - xp 40 
+    // 2 - xp 36 -> base - (2*(base*5%)) - (killcount*10%)
+    // 3 - xp 30.4 -> 
+    // 4 - xp 23
     let mut progression = 1.0;
+    let mut base_given_xp: f32 = 50.0;
+    let mut kill_count = 0;
 
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
@@ -577,10 +603,32 @@ async fn main() {
         });
 
         match level_state {
+            LevelState::PreGame => {
+                clear_background(Color::from_hex(0x252129));
+                set_default_camera();
+                draw_texture_ex(main_title_texture, screen_width()/2.-180., 100., WHITE, 
+                    DrawTextureParams { 
+                        dest_size: Some(vec2(36. * 10., 22. * 10.)), 
+                        source: Some(Rect::new(5., 3., 36., 22.)),
+                        ..Default::default()
+                    }
+                );
+                draw_texture_ex(main_title_texture, screen_width()/2.-290., screen_height() - 300., WHITE, 
+                    DrawTextureParams { 
+                        dest_size: Some(vec2(58. * 10., 18. * 10.)), 
+                        source: Some(Rect::new(5., 30., 58., 18.)),
+                        ..Default::default()
+                    }
+                );
+                if is_key_pressed(KeyCode::Z) {
+                    level_state = LevelState::InGame;
+                }    
+                // tween to start
+            }
             LevelState::InGame => {
                 choosen_upgrade_index = 0;
-                for x in 0..80 {
-                    for y in 0..50 {
+                for x in 0..160 {
+                    for y in 0..100 {
                         draw_map_cell(main_texture, x, y);
                     }
                 }
@@ -706,44 +754,49 @@ async fn main() {
 
                 // Spawning enemies
                 // Count slimes
-                if enemy_cooldown <= 0 {
-                    spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y);
-                    enemy_cooldown = max_enemy_cooldown;
-                } else {
-                    enemy_cooldown = enemy_cooldown.clamp(0, enemy_cooldown - 100);
+                if enemies.len() < (5*(progression as usize)) {
+                    let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
+                    if given_xp < 3. { given_xp = 3. }
+                    println!("{} given_xp", given_xp);                    
+                    spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y, given_xp);
                 }
 
                 // Count Bats
-                if bat_enemies.len() < 5 {
+                if bat_enemies.len() < (2*(progression as usize)) {
                     let x_dir: f32;
                     match rand::gen_range(0, 2) {
                         0 => x_dir = -1.,
                         _ => x_dir = 1.,
                     }
                     let spawn_pos_y = player_pos_y * (rand::gen_range(0.5, 2.));
+                    let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
+                    if given_xp < 3. { given_xp = 3. }
+                    println!("{} given_xp", given_xp);
                     bat_enemies.push(
-                        BatEnemy::new(player_pos_x - 64. * (x_dir), spawn_pos_y, x_dir)
+                        BatEnemy::new(player_pos_x - 64. * (x_dir), spawn_pos_y, x_dir, given_xp)
                     );
                 }
 
                 // And towers
-                if tower_enemies.len() < 2 {
-                    // Random around radius
-                    // let angle = rand::gen_range(0.0, std::f32::consts::TAU); // Random angle in radians
-                    // let distance = rand::gen_range(20.,100.); // Random distance within the spawn radius
-                
-                    // let spawn_x = player_pos_x + distance * angle.cos();
-                    // let spawn_y = player_pos_y + distance * angle.sin();
-                
-                    // Random around circ 
-                    let angle = rand::gen_range(0.0,std::f32::consts::TAU); // Random angle in radians
-
-                    let spawn_x = player_pos_x + 32. * angle.cos();
-                    let spawn_y = player_pos_y + 32. * angle.sin();
-
-                    tower_enemies.push(
-                        TowerEnemy::new(spawn_x, spawn_y)
-                    );
+                if progression >= 3. {
+                    if tower_enemies.len() < (2*progression as usize) {
+                        // Random around radius
+                        // let angle = rand::gen_range(0.0, std::f32::consts::TAU); // Random angle in radians
+                        // let distance = rand::gen_range(20.,100.); // Random distance within the spawn radius
+                    
+                        // let spawn_x = player_pos_x + distance * angle.cos();
+                        // let spawn_y = player_pos_y + distance * angle.sin();
+                    
+                        // Random around circ 
+                        let angle = rand::gen_range(0.0,std::f32::consts::TAU); // Random angle in radians
+    
+                        let spawn_x = player_pos_x + 32. * angle.cos();
+                        let spawn_y = player_pos_y + 32. * angle.sin();
+    
+                        tower_enemies.push(
+                            TowerEnemy::new(spawn_x, spawn_y)
+                        );
+                    }
                 }
 
                 if player_regen_timer.finished() {
@@ -757,8 +810,8 @@ async fn main() {
  
                 damage_enemy(&mut bullets, &mut enemies, &mut damage_popups, &mut screen_shake_amount, &player_damage);
                 bullet_damage_player(&mut enemy_bullets, &player_pos_x, &player_pos_y, &mut player_hp, &mut damage_popups, &mut screen_shake_amount, &mut player_inv_timer, &player_is_dashing);
-                kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies);
-                kill_bat_enemies(&mut bat_enemies, &mut player_xp, &mut dead_enemies);
+                kill_enemies(&mut enemies, &mut player_xp, &mut dead_enemies, &mut kill_count, &mut progression, &mut base_given_xp);
+                kill_bat_enemies(&mut bat_enemies, &mut player_xp, &mut dead_enemies, &mut kill_count, &mut progression, &mut base_given_xp);
                 clean_bat_enemies(&mut bat_enemies, &player_pos_x, &player_pos_y);
 
                 if player_xp >= player_max_xp {
@@ -772,14 +825,13 @@ async fn main() {
                     bullet_cooldown.restart();
                 }
 
-                // println!("{} regen_dur", player_regen_timer.duration.as_millis());
-        
                 // Get rid of things that shouldn't be around anymore
                 // Bullets, enemies, particles, pop-ups
                 bullets.retain(|b| b.active);
                 enemy_bullets.retain(|b| b.active);
                 enemies.retain(|e| e.alive);
                 bat_enemies.retain(|e| e.active);
+                tower_enemies.retain(|e| e.active);
                 dead_enemies.retain(|e| e.active);
                 damage_popups.retain(|e| e.active);
                 particles.retain(|p| p.active);        
@@ -795,38 +847,43 @@ async fn main() {
                     get_seconds_from_millis(sw.split().split.as_millis())
                 );
 
-                // Trigger level progression
-                // if sw.split().split.as_millis() > 5000 {
-                //     // destroy all entities 
-                //     // but the player
-                //     // - deallocates but not sure if its good
-                //     enemies = Vec::new();
-                //     bat_enemies = Vec::new();
-                //     bullets = Vec::new();
-                //     dead_enemies = Vec::new();
-                //     damage_popups = Vec::new();
-                //     particles = Vec::new();
+                // Trigger end game progression
+                if sw.split().split.as_millis() > 240000 {
+                    // destroy all entities 
+                    // but the player
+                    // - deallocates but not sure if its good
+                    enemies = Vec::new();
+                    bat_enemies = Vec::new();
+                    bullets = Vec::new();
+                    dead_enemies = Vec::new();
+                    damage_popups = Vec::new();
+                    particles = Vec::new();
 
-                //     if sw.split().split.as_millis() < 6000 {
-                //         screen_shake_amount += 0.5;
-                //     }
+                    if sw.split().split.as_millis() < 6000 {
+                        screen_shake_amount += 0.5;
+                    }
 
-                //     if sw.split().split.as_millis() > 8000 {
-                //         draw_rectangle(
-                //             0., 
-                //             0., 
-                //             tweener.move_by(DT), 
-                //             screen_height(), 
-                //             Color::from_rgba(37, 33, 41, 255)
-                //         );
-                //         if tweener.is_finished() {
-                //             level_state = LevelState::StageCleared
-                //         }
-                //     }
-                // }
+                    if sw.split().split.as_millis() > 8000 {
+                        draw_rectangle(
+                            0., 
+                            0., 
+                            tweener.move_by(DT), 
+                            screen_height(), 
+                            Color::from_rgba(37, 33, 41, 255)
+                        );
+                        if tweener.is_finished() {
+                            level_state = LevelState::StageCleared
+                        }
+                    }
+                }
             },
             LevelState::StageCleared => {
                 clear_background(Color::from_rgba(37, 33, 41, 255));
+                // Thank player
+                // show kill count
+                // credits
+                // press Z to return to PreGame
+
                 // for x in 0..80 {
                 //     for y in 0..50 {
                 //         draw_map_cell(main_texture, x, y);
@@ -847,7 +904,7 @@ async fn main() {
                 let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
                 draw_player(player_texture, frame, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
-                draw_enemies(main_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
+                draw_enemies(slime_texture, &mut enemies, &mut player_pos_x, &mut player_pos_y);
                 draw_enemies_collider(&mut enemies);
                 draw_bullets(main_texture, &mut bullets);
 
