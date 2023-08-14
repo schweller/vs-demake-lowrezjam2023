@@ -538,7 +538,7 @@ async fn main() {
     );
     let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
     let mut looper = Tweener::new(0., 10., 1.5, Oscillator::new(CircInOut));
-    let mut sw = stopwatch_rs::StopWatch::start();
+    let mut sw = StopWatch::start();
     
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut screen_shake_amount: f32 = 0.;
