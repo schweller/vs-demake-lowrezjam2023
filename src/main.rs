@@ -10,7 +10,6 @@ mod enemies;
 mod damage_popup;
 mod animation;
 mod particles;
-mod player;
 mod stopwatch;
 use crate::tween::Tween;
 use ui::*;
@@ -20,7 +19,6 @@ use enemies::*;
 use damage_popup::*;
 use animation::Animation;
 use particles::*;
-use player::*;
 use stopwatch::*;
 
 use ::tween::{Tweener, Oscillator, CircInOut};
@@ -66,7 +64,6 @@ fn window_conf() -> Conf {
         window_title: "LowRezJam 2023".to_owned(), 
         window_width: 640, // 640 + 120 
         window_height: 640, // 320 + 120
-        high_dpi: true,
         window_resizable: false,
         ..Default::default()
     }
@@ -300,8 +297,8 @@ fn level_up_player(player_xp: &mut f32, player_max_xp: &mut f32, mut player_leve
     *state = LevelState::LevelUp;
 }
 
-fn level_up_input(state: &mut LevelState) -> Option<LevelState> {
-    if is_key_pressed(KeyCode::Space) {
+fn level_up_input() -> Option<LevelState> {
+    if is_key_pressed(KeyCode::Z) {
         return Some(LevelState::InGame)
     }
     None
@@ -309,7 +306,7 @@ fn level_up_input(state: &mut LevelState) -> Option<LevelState> {
 
 fn choose_upgrade_input(index: &mut i32, tween: &mut Tween) {
     if is_key_pressed(KeyCode::Right) {
-        if *index == 2 {
+        if *index == 1 {
             return;
         } else {
             *index += 1;
@@ -442,13 +439,9 @@ pub fn update_given_xp(base_given_xp: &mut f32, kill_count: i32) {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    // let min_camera_zoom = 1.3;
-    // let max_camera_zoom = 2.0;
-    let mut camera_focal_y = screen_height() / 2.0;
-    let mut camera_focal_x = screen_width() / 2.0;
-    // let main_area_width = 570.;
     let camera_zoom : f32 = 10.0;
 
+    // This absolute mess which I will change one day
     let main_texture = load_texture("assets/vs-dx-atlas-padded.png").await.unwrap();
     main_texture.set_filter(FilterMode::Nearest);
     let ui_texture = load_texture("assets/vs-dx-ui-atlas.png").await.unwrap();
@@ -465,12 +458,10 @@ async fn main() {
     main_title_texture.set_filter(FilterMode::Nearest);
 
     // Player definitions
-    let mut player = Player::new(64., 64.);
-
     let mut player_pos_x = 128.;
     let mut player_pos_y = 128.;
     let player_max_hp = 100.;
-    let mut player_hp : f32 = player_max_hp;
+    let mut player_hp : f32 = 5.;
     let mut player_max_xp = 100.;
     let mut player_xp = 1.;
     let mut player_level = 1;
@@ -481,6 +472,11 @@ async fn main() {
     let mut player_regen = 1.;
     let mut player_regen_timer = Timer::new(5000);
     let mut player_inv_timer = Timer::new(1800);
+    let mut player_is_dashing = false;
+    let mut player_direction = None;
+    let mut dashing_timer = Timer::new(500);
+    let mut dash_speed = 40.0;
+    let mut player_active = true;
     let player_damage = 2.;
 
     let mut idle_state_rects : Vec<Rect> = Vec::new();
@@ -506,27 +502,27 @@ async fn main() {
     // Level up UI definitions
     let mut choosen_upgrade_index = 0;
 
-    // Enemies & Bullets
+    // Enemies & Bullets & Particles
     let mut enemies: Vec<Enemies> = Vec::new();
     let mut bullets: Vec<Bullet> = Vec::new();
     let mut dead_enemies: Vec<DeadEnemy> = Vec::new();
-
     let mut particles: Vec<Particle> = Vec::new();
-
+    let mut intro_particles: Vec<Particle> = Vec::new();
     let max_b_cooldown = Timer::new(700);
     let mut bullet_cooldown = max_b_cooldown;
     let mut current_bullet_cooldown_bonus = 1.0;
-
     let max_enemy_cooldown = Duration::from_secs(8).as_millis();
     let mut enemy_cooldown = max_enemy_cooldown;
-
     let mut enemy_bullets: Vec<Bullet> = Vec::new();
-
-    let mut level_state = LevelState::PreGame;
 
     // let mut upgrades: Vec<Box<dyn Upgrade>> = Vec::new();
     let mut upgrades: Vec<Box<dyn Upgrade>> = pick_random_upgrades();
 
+    let mut bat_enemies : Vec<BatEnemy> = Vec::new();
+    let mut tower_enemies: Vec<TowerEnemy> = Vec::new();
+
+    // Level Transition tweener
+    // & Tweeners in general
     // Tween for upgrade
     let mut upgrade_menu_tween = Tween::from_keyframes(
         vec![
@@ -537,17 +533,8 @@ async fn main() {
         0,
         1,
         true,
-    );
-
-    let mut bat_enemies : Vec<BatEnemy> = Vec::new();
-    let mut tower_enemies: Vec<TowerEnemy> = Vec::new();
-
-    // Level Transition tweener
-    let (start, end) = (0., screen_width());
-    let duration = 5.0;
-    let mut tweener = Tweener::sine_in_out(start, end, duration);
-    const DT: f32 = 1.0 / 60.0;
-
+    );    
+    let mut tweener = Tweener::sine_in_out(0., screen_width(), 5.0);
     let mut test_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
     let mut level_up_letters_tweener : TestTween<f32, f32> = Tweener::new(
         -3., 
@@ -555,17 +542,19 @@ async fn main() {
         2.2, 
         Box::new(Oscillator::new(::tween::SineInOut))
     );
+    let mut main_title_tweener : TestTween<f32, f32> = Tweener::new(
+        -10., 
+        10., 
+        2.2, 
+        Box::new(Oscillator::new(::tween::SineInOut))
+    );    
     let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
-    let mut looper = Tweener::new(0., 10., 1.5, Oscillator::new(CircInOut));
+    let mut death_tweener = Tweener::sine_in_out(0., 10., 2.);
+    
     let mut sw = StopWatch::start();
     
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut screen_shake_amount: f32 = 0.;
-
-    let mut player_is_dashing = false;
-    let mut player_direction = None;
-    let mut dashing_timer = Timer::new(500);
-    let mut dash_speed = 40.0;
 
     // Progression
     // 1 - xp 40 
@@ -576,23 +565,21 @@ async fn main() {
     let mut base_given_xp: f32 = 50.0;
     let mut kill_count = 0;
 
+    let mut level_state = LevelState::PreGame;
     loop {
         clear_background(Color::from_rgba(37, 33, 41, 255));
         let delta = get_frame_time();
 
-        let camera_buffer = (screen_height() / camera_zoom) * 2.0 * 0.1;
-        camera_focal_y = player_pos_y;
-        camera_focal_x = player_pos_x;
-
         // still not sure here
-        // request_new_screen_size(640., 640.);
+        request_new_screen_size(640., 640.);
         screen_shake_amount *= 0.94;
 
         let screen_shake = Vec2::new(
             rand::gen_range(-screen_shake_amount, screen_shake_amount),
             rand::gen_range(-screen_shake_amount, screen_shake_amount),
         );
-
+        let camera_focal_y = player_pos_y;
+        let camera_focal_x = player_pos_x;
         set_camera(&Camera2D {
             target: vec2(lerp(camera_focal_x + 4., camera_focal_x - 4., get_frame_time()), lerp(camera_focal_y + 4., camera_focal_y - 4., get_frame_time())) + screen_shake,
             zoom: Vec2::new(
@@ -606,7 +593,9 @@ async fn main() {
             LevelState::PreGame => {
                 clear_background(Color::from_hex(0x252129));
                 set_default_camera();
-                draw_texture_ex(main_title_texture, screen_width()/2.-180., 100., WHITE, 
+
+                draw_particles(&mut intro_particles);
+                draw_texture_ex(main_title_texture, screen_width()/2.-180., 100. + main_title_tweener.move_by(delta), WHITE, 
                     DrawTextureParams { 
                         dest_size: Some(vec2(36. * 10., 22. * 10.)), 
                         source: Some(Rect::new(5., 3., 36., 22.)),
@@ -620,9 +609,57 @@ async fn main() {
                         ..Default::default()
                     }
                 );
+                spawn_particle(
+                    &mut intro_particles, 
+                    screen_width()/4., 
+                    0.,
+                    Box::new(IntroParticle{})
+                );
+                update_particles(&mut intro_particles);
+                                
                 if is_key_pressed(KeyCode::Z) {
+                    // restart the "game state"
+                    sw = StopWatch::start();
+                    player_pos_x = 128.;
+                    player_pos_y = 128.;
+                    player_hp = 5.;
+                    player_max_xp = 100.;
+                    player_xp = 1.;
+                    player_level = 1;
+                    player_flip_x = false;
+                    player_speed_bonus = 1.;
+                    player_regen = 1.;
+                    player_regen_timer = Timer::new(5000);
+                    player_inv_timer = Timer::new(1800);
+                    player_is_dashing = false;
+                    player_direction = None;
+                    dashing_timer = Timer::new(500);
+                    dash_speed = 40.0;
+                    player_active = true;
+
+                    upgrade_menu_tween = Tween::from_keyframes(
+                        vec![
+                            Keyframe::new(0.0, 0.0, EaseOut),
+                            Keyframe::new(4.0, 0.5, EaseOut),
+                            Keyframe::new(0.0, 1.0, EaseOut),
+                        ],
+                        0,
+                        1,
+                        true,
+                    );    
+                    tweener = Tweener::sine_in_out(0., screen_width(), 5.0);
+                    test_tweener = Tweener::new(0., 10., 1.5, Box::new(Oscillator::new(CircInOut)));
+                    level_up_letters_tweener = Tweener::new(
+                        -3., 
+                        3., 
+                        2.2, 
+                        Box::new(Oscillator::new(::tween::SineInOut))
+                    );
+                    init_upgrade_tweener = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
+                    death_tweener = Tweener::sine_in_out(0., 10., 2.);                    
+
                     level_state = LevelState::InGame;
-                }    
+                }
                 // tween to start
             }
             LevelState::InGame => {
@@ -632,46 +669,45 @@ async fn main() {
                         draw_map_cell(main_texture, x, y);
                     }
                 }
-
-                // Move and Dashing input block
-                if is_key_pressed(KeyCode::A) && !player_is_dashing {
-                    player_direction = get_direction();
-                    if let Some(_dir) = player_direction {
-                        dashing_timer.restart();
-                        player_is_dashing = true;
+                
+                // Update block
+                if player_active {
+                    // Move and Dashing input block
+                    if is_key_pressed(KeyCode::X) && !player_is_dashing {
+                        player_direction = get_direction();
+                        if let Some(_dir) = player_direction {
+                            dashing_timer.restart();
+                            player_is_dashing = true;
+                        }
                     }
-                }
-
-                if !player_is_dashing {
-                    move_player(
+                    if !player_is_dashing {
+                        move_player(
+                            &mut player_pos_x, 
+                            &mut player_pos_y, 
+                            &mut player_flip_x, 
+                            &player_speed_bonus, 
+                            delta
+                        );
+                    }
+                    update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
+                    update_enemies_pushing(&mut enemies);
+                    update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &player_is_dashing, &mut player_inv_timer, &mut screen_shake_amount);
+                    update_bat_enemies_position(&mut bat_enemies);
+                    update_bat_enemies_colliding(
+                        &mut bat_enemies, 
                         &mut player_pos_x, 
                         &mut player_pos_y, 
-                        &mut player_flip_x, 
-                        &player_speed_bonus, 
-                        delta
+                        &mut player_hp, 
+                        &mut player_inv_timer, 
+                        &mut screen_shake_amount, 
+                        &mut damage_popups,
+                        &player_is_dashing
                     );
+                    update_tower_enemies(&mut tower_enemies, &player_pos_x, &player_pos_y, &mut enemy_bullets);
+                    update_bullets(&mut bullets, &mut particles);
+                    update_enemy_bullets(&mut enemy_bullets, &mut particles, delta);
                 }
-
-                // Update block
-                update_enemies_position(&mut enemies, &mut player_pos_x, &mut player_pos_y);
-                update_enemies_pushing(&mut enemies);
-                update_enemies_colliding(&mut enemies, &mut player_pos_x, &mut player_pos_y, &mut player_hp, &player_is_dashing, &mut player_inv_timer, &mut screen_shake_amount);
-                update_bat_enemies_position(&mut bat_enemies);
-                update_bat_enemies_colliding(
-                    &mut bat_enemies, 
-                    &mut player_pos_x, 
-                    &mut player_pos_y, 
-                    &mut player_hp, 
-                    &mut player_inv_timer, 
-                    &mut screen_shake_amount, 
-                    &mut damage_popups,
-                    &player_is_dashing
-                );
-
-                update_tower_enemies(&mut tower_enemies, &player_pos_x, &player_pos_y, &mut enemy_bullets);
                 update_dead_enemies(&mut dead_enemies, &mut player_pos_x);
-                update_bullets(&mut bullets, &mut particles);
-                update_enemy_bullets(&mut enemy_bullets, &mut particles, delta);
                 update_particles(&mut particles);
                 
                 if player_is_dashing {        
@@ -754,52 +790,53 @@ async fn main() {
 
                 // Spawning enemies
                 // Count slimes
-                if enemies.len() < (5*(progression as usize)) {
-                    let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
-                    if given_xp < 3. { given_xp = 3. }
-                    println!("{} given_xp", given_xp);                    
-                    spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y, given_xp);
-                }
-
-                // Count Bats
-                if bat_enemies.len() < (2*(progression as usize)) {
-                    let x_dir: f32;
-                    match rand::gen_range(0, 2) {
-                        0 => x_dir = -1.,
-                        _ => x_dir = 1.,
+                if player_active {
+                    if enemies.len() < (5*(progression as usize)) {
+                        let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
+                        if given_xp < 3. { given_xp = 3. }
+                        println!("{} given_xp", given_xp);                    
+                        spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y, given_xp);
                     }
-                    let spawn_pos_y = player_pos_y * (rand::gen_range(0.5, 2.));
-                    let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
-                    if given_xp < 3. { given_xp = 3. }
-                    println!("{} given_xp", given_xp);
-                    bat_enemies.push(
-                        BatEnemy::new(player_pos_x - 64. * (x_dir), spawn_pos_y, x_dir, given_xp)
-                    );
-                }
 
-                // And towers
-                if progression >= 3. {
-                    if tower_enemies.len() < (2*progression as usize) {
-                        // Random around radius
-                        // let angle = rand::gen_range(0.0, std::f32::consts::TAU); // Random angle in radians
-                        // let distance = rand::gen_range(20.,100.); // Random distance within the spawn radius
-                    
-                        // let spawn_x = player_pos_x + distance * angle.cos();
-                        // let spawn_y = player_pos_y + distance * angle.sin();
-                    
-                        // Random around circ 
-                        let angle = rand::gen_range(0.0,std::f32::consts::TAU); // Random angle in radians
-    
-                        let spawn_x = player_pos_x + 32. * angle.cos();
-                        let spawn_y = player_pos_y + 32. * angle.sin();
-    
-                        tower_enemies.push(
-                            TowerEnemy::new(spawn_x, spawn_y)
+                    // Count Bats
+                    if bat_enemies.len() < (2*(progression as usize)) {
+                        let x_dir: f32;
+                        match rand::gen_range(0, 2) {
+                            0 => x_dir = -1.,
+                            _ => x_dir = 1.,
+                        }
+                        let spawn_pos_y = player_pos_y * (rand::gen_range(0.5, 2.));
+                        let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
+                        if given_xp < 3. { given_xp = 3. }
+                        println!("{} given_xp", given_xp);
+                        bat_enemies.push(
+                            BatEnemy::new(player_pos_x - 64. * (x_dir), spawn_pos_y, x_dir, given_xp)
                         );
                     }
+                    // And towers
+                    if progression >= 3. {
+                        if tower_enemies.len() < (2*progression as usize) {
+                            // Random around radius
+                            // let angle = rand::gen_range(0.0, std::f32::consts::TAU); // Random angle in radians
+                            // let distance = rand::gen_range(20.,100.); // Random distance within the spawn radius
+                        
+                            // let spawn_x = player_pos_x + distance * angle.cos();
+                            // let spawn_y = player_pos_y + distance * angle.sin();
+                        
+                            // Random around circ 
+                            let angle = rand::gen_range(0.0,std::f32::consts::TAU); // Random angle in radians
+        
+                            let spawn_x = player_pos_x + 32. * angle.cos();
+                            let spawn_y = player_pos_y + 32. * angle.sin();
+        
+                            tower_enemies.push(
+                                TowerEnemy::new(spawn_x, spawn_y)
+                            );
+                        }
+                    }
                 }
 
-                if player_regen_timer.finished() {
+                if player_regen_timer.finished() && player_active {
                     if player_hp + player_regen >= player_max_hp {
                         player_hp = player_max_hp
                     } else {
@@ -847,8 +884,32 @@ async fn main() {
                     get_seconds_from_millis(sw.split().split.as_millis())
                 );
 
+                if player_hp <= 0. {
+                    death_tweener.move_by(delta);
+                    player_hp = 0.;
+                    player_active = false;
+                    sw.suspend();
+
+                    enemies = Vec::new();
+                    bat_enemies = Vec::new();
+                    bullets = Vec::new();
+                    dead_enemies = Vec::new();
+                    damage_popups = Vec::new();
+                    particles = Vec::new();
+
+                    player_pos_x = -999.;
+                    player_pos_y = -999.;
+
+
+                    screen_shake_amount += 0.5 * 1.1;
+
+                    if death_tweener.is_finished() {
+                        level_state = LevelState::PreGame;
+                    }
+                }
+
                 // Trigger end game progression
-                if sw.split().split.as_millis() > 240000 {
+                if sw.split().split.as_millis() > 240000 && player_active {
                     // destroy all entities 
                     // but the player
                     // - deallocates but not sure if its good
@@ -867,7 +928,7 @@ async fn main() {
                         draw_rectangle(
                             0., 
                             0., 
-                            tweener.move_by(DT), 
+                            tweener.move_by(delta), 
                             screen_height(), 
                             Color::from_rgba(37, 33, 41, 255)
                         );
@@ -913,7 +974,7 @@ async fn main() {
                 set_default_camera();
 
                 choose_upgrade_input(&mut choosen_upgrade_index, &mut upgrade_menu_tween);
-                let result = level_up_input(&mut level_state);
+                let result = level_up_input();
                 if let Some(newstate) = result {
                     // fine tune!
                     let idx = choosen_upgrade_index as usize;

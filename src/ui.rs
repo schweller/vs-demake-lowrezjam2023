@@ -132,7 +132,14 @@ pub fn draw_level_up_title(
         (screen_width() / 2.) + 130., 
         80. - letter_tween.move_by(delta), 
         TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
-    );                 
+    );
+
+    draw_text_ex(
+        "press Z to choose",
+        (screen_width() / 2.) - 270., 
+        150., 
+        TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+    );
 
     // draw_text_ex(
     //     "LEVEL UP!",

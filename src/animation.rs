@@ -29,15 +29,4 @@ impl Animation {
 
         Some(self.frames[self.current_frame])
     }
-
-    #[deprecated]
-    fn is_animation_finished(&mut self) -> bool {
-        if !self.repeating {
-            return self.current_frame == self.frames.len() - 1
-                || self.current_frame == 0
-                || self.current_frame == (self.frames.len() - 1) / 2;
-        }
-        
-        false
-    }    
 }

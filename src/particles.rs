@@ -90,6 +90,27 @@ impl ParticleType for PlayerDashParticle {
     }
 }
 
+pub struct IntroParticle {}
+
+impl ParticleType for IntroParticle {
+    fn new(&self, x: f32, y: f32) -> Particle {
+        let mut particle = Particle {
+            ..Default::default()
+        };
+        particle.lifetime = Timer::new(10000);
+        particle.velocity_start = vec2(1., 5.); 
+        particle.velocity_end = vec2(1., 5.);
+        particle.color_start = Color::new(1., 1., 1., 0.5); 
+        particle.color_end = Color::new(0.2, 0.2, 0.2, 0.1);
+        particle.size_start = 1.5 + (rand::gen_range(0.5, 1.) - 0.5) * 3.0; 
+        particle.size_end = 0.2 + (rand::gen_range(0.5, 1.) - 0.5) * 3.0;
+        particle.x = x + (rand::gen_range(0.5, 1.) - 0.5) * 0.1 * 5000.;
+        particle.y = y + (rand::gen_range(0.5, 1.) - 0.5) * 0.5 * 5000.;
+
+        particle        
+    }
+}
+
 pub fn spawn_particle(particles: &mut Vec<Particle>, x: f32, y: f32, particle_type: Box<dyn ParticleType>) {
     let p = particle_type.new(x, y);
     particles.push(p);
