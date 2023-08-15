@@ -11,6 +11,7 @@ mod damage_popup;
 mod animation;
 mod particles;
 mod stopwatch;
+mod stopwatch_bevy;
 use crate::tween::Tween;
 use ui::*;
 use timer::Timer;
@@ -20,6 +21,7 @@ use damage_popup::*;
 use animation::Animation;
 use particles::*;
 use stopwatch::*;
+use stopwatch_bevy::*;
 
 use ::tween::{Tweener, Oscillator, CircInOut};
 
@@ -258,7 +260,7 @@ fn damage_enemy(
                     dmg_pop.push(DamagePopup::new(e.position.x, e.position.y, player_dmg.abs() as i32));
                     *screen_shake_amount += 1.0;
                     e.hp -= player_dmg;
-                    println!("{}", e.hp);
+                    // println!("{}", e.hp);
                 }
             }
         }
@@ -426,7 +428,7 @@ pub fn get_direction() -> Option<Direction> {
 }
 
 pub fn update_progress_level(progression: &mut f32, kill_count: i32) {
-    println!(" rem {}", kill_count.rem_euclid(15));
+    // println!(" rem {}", kill_count.rem_euclid(15));
      if kill_count > 0 && kill_count.rem_euclid(15) == 0 {
         *progression += 1.0;
      }
@@ -461,9 +463,9 @@ async fn main() {
     let mut player_pos_x = 128.;
     let mut player_pos_y = 128.;
     let player_max_hp = 100.;
-    let mut player_hp : f32 = 5.;
+    let mut player_hp : f32 = player_max_hp;
     let mut player_max_xp = 100.;
-    let mut player_xp = 1.;
+    let mut player_xp = 0.;
     let mut player_level = 1;
     let mut current_player_hp_percentage; 
     let mut current_player_xp_percentage;
@@ -551,7 +553,8 @@ async fn main() {
     let mut init_upgrade_tweener : TestTween<f32, f32> = Tweener::new(0., 10., 1.5, Box::new(CircInOut));
     let mut death_tweener = Tweener::sine_in_out(0., 10., 2.);
     
-    let mut sw = StopWatch::start();
+    // let mut sw = StopWatch::start();
+    let mut sw = Stopwatch::new();
     
     let mut damage_popups : Vec<DamagePopup> = Vec::new();
     let mut screen_shake_amount: f32 = 0.;
@@ -571,7 +574,7 @@ async fn main() {
         let delta = get_frame_time();
 
         // still not sure here
-        request_new_screen_size(640., 640.);
+        // request_new_screen_size(640., 640.);
         screen_shake_amount *= 0.94;
 
         let screen_shake = Vec2::new(
@@ -619,12 +622,12 @@ async fn main() {
                                 
                 if is_key_pressed(KeyCode::Z) {
                     // restart the "game state"
-                    sw = StopWatch::start();
+                    sw = Stopwatch::new();
                     player_pos_x = 128.;
                     player_pos_y = 128.;
-                    player_hp = 5.;
+                    player_hp = player_max_hp;
                     player_max_xp = 100.;
-                    player_xp = 1.;
+                    player_xp = 0.;
                     player_level = 1;
                     player_flip_x = false;
                     player_speed_bonus = 1.;
@@ -663,6 +666,7 @@ async fn main() {
                 // tween to start
             }
             LevelState::InGame => {
+                sw.tick(Duration::from_secs_f32(0.01));
                 choosen_upgrade_index = 0;
                 for x in 0..160 {
                     for y in 0..100 {
@@ -794,7 +798,7 @@ async fn main() {
                     if enemies.len() < (5*(progression as usize)) {
                         let mut given_xp = base_given_xp - (0.1 * (base_given_xp)) - (0.5 * (kill_count as f32)) - progression*4.;
                         if given_xp < 3. { given_xp = 3. }
-                        println!("{} given_xp", given_xp);                    
+                        // println!("{} given_xp", given_xp);                    
                         spawn_enemies(&mut enemies, &player_pos_x, &player_pos_y, given_xp);
                     }
 
@@ -880,15 +884,15 @@ async fn main() {
                 draw_level_ui(ui_texture, &current_player_hp_percentage, &current_player_xp_percentage, &player_level, &player_inv_timer);
                 draw_level_timer_ui(
                     font, 
-                    get_minutes_from_millis(sw.split().split.as_millis()), 
-                    get_seconds_from_millis(sw.split().split.as_millis())
+                    get_minutes_from_millis(sw.elapsed().as_millis()), 
+                    get_seconds_from_millis(sw.elapsed().as_millis())
                 );
 
                 if player_hp <= 0. {
                     death_tweener.move_by(delta);
                     player_hp = 0.;
                     player_active = false;
-                    sw.suspend();
+                    sw.pause();
 
                     enemies = Vec::new();
                     bat_enemies = Vec::new();
@@ -909,7 +913,7 @@ async fn main() {
                 }
 
                 // Trigger end game progression
-                if sw.split().split.as_millis() > 240000 && player_active {
+                if sw.elapsed().as_millis() > 240000 && player_active {
                     // destroy all entities 
                     // but the player
                     // - deallocates but not sure if its good
@@ -920,11 +924,11 @@ async fn main() {
                     damage_popups = Vec::new();
                     particles = Vec::new();
 
-                    if sw.split().split.as_millis() < 6000 {
+                    if sw.elapsed().as_millis() < 246000 {
                         screen_shake_amount += 0.5;
                     }
 
-                    if sw.split().split.as_millis() > 8000 {
+                    if sw.elapsed().as_millis() > 248000 {
                         draw_rectangle(
                             0., 
                             0., 
@@ -945,14 +949,45 @@ async fn main() {
                 // credits
                 // press Z to return to PreGame
 
-                // for x in 0..80 {
-                //     for y in 0..50 {
-                //         draw_map_cell(main_texture, x, y);
-                //     }
-                // }                
-                // clear vecs/entities
-                // reset defaults
-                // next stage?
+                set_default_camera();
+                draw_text_ex(
+                    "You survived!",
+                    (screen_width() / 2.) - 200., 
+                    150., 
+                    TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+                );
+            
+                draw_text_ex(
+                    "Thanks for playing!",
+                    (screen_width() / 2.) - 300., 
+                    250., 
+                    TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+                );
+
+                draw_text_ex(
+                    "Made by inacho",
+                    (screen_width() / 2.) - 230., 
+                    350., 
+                    TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+                );
+
+                draw_text_ex(
+                    "For LowRezJam2023",
+                    (screen_width() / 2.) - 280., 
+                    400., 
+                    TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+                );                
+
+                draw_text_ex(
+                    "Press Z to restart",
+                    (screen_width() / 2.) - 300., 
+                    500., 
+                    TextParams { font, font_size: 64, font_scale: 1., font_scale_aspect: 1., ..Default::default()}
+                );  
+
+                if is_key_pressed(KeyCode::Z) {
+                    level_state = LevelState::PreGame;
+                }
             }
             LevelState::LevelUp => {
                 for x in 0..80 {
@@ -961,7 +996,7 @@ async fn main() {
                     }
                 }
         
-                sw.suspend();
+                sw.pause();
                 let frame = anims.get_mut("idle").unwrap().get_animation_source(Duration::from_secs_f32(get_frame_time()));
                 draw_player(player_texture, frame, &mut player_pos_x, &mut player_pos_y, &player_flip_x, &player_inv_timer);
                 // draw_player_collider(&mut player_pos_x, &mut player_pos_y);
@@ -981,16 +1016,16 @@ async fn main() {
                     let upg = upgrades[idx].get_name();
                     match upg {
                         "Speed" => {
-                            println!("Speed upgrade");
+                            // println!("Speed upgrade");
                             player_speed_bonus += 0.1;
                         }
                         "FireRate" => {
                             current_bullet_cooldown_bonus -= 0.1;
-                            println!("FireRate upgrade");
+                            // println!("FireRate upgrade");
                         }
                         "Recovery" => {
                             player_regen += 2.;
-                            println!("Recovery upgrade");
+                            // println!("Recovery upgrade");
                         }
                         "FasterRecovery" => {
                             let dur = player_regen_timer.duration;
@@ -1001,7 +1036,7 @@ async fn main() {
                         "Dash" => {
                             let dash_5_percent = dash_speed * 0.05;
                             dash_speed += dash_5_percent;
-                            println!("{}", dash_speed);
+                            // println!("{}", dash_speed);
                         },
                         "MoreIframes" => {
                             let dur = player_inv_timer.duration;
@@ -1011,7 +1046,7 @@ async fn main() {
                         }
                         _ => {}
                     }
-                    sw.resume();
+                    sw.unpause();
                     level_state = newstate;
                 }
 

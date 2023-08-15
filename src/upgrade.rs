@@ -1,5 +1,4 @@
-use macroquad::{prelude::*, rand::ChooseRandom};
-// use nanorand::{WyRand, Rng};
+use macroquad::prelude::*;
 
 pub trait Upgrade {
     fn get_name(&self) -> &'static str;

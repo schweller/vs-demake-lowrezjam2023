@@ -1,13 +1,24 @@
 use instant::Instant;
 use std::time::Duration;
+use macroquad::prelude::*;
+
+pub fn now() -> f64 {
+    miniquad::date::now()
+    // std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH)
+    //                             .expect("System clock was before 1970.")
+    //                             .as_secs_f64() * 1000.0
+}
 
 enum State {
     Running {
         lap_start_time: Instant,
+        lap_start_time_p: f64
     },
     Stopped {
         lap_start_time: Instant,
+        lap_start_time_p: f64,
         suspend_time: Instant,
+        suspend_time_p: f64
     },
 }
 use State::*;
@@ -15,6 +26,7 @@ use State::*;
 /// The stopwatch.
 pub struct StopWatch {
     start_time: Instant,
+    start_time_patch: f64,
     state: State,
     cur_suspend: Duration,
     total_suspend: Duration,
@@ -37,10 +49,13 @@ impl StopWatch {
     /// ```
     pub fn start() -> Self {
         let now = Instant::now();
+        let now_p = miniquad::date::now();
         Self {
             start_time: now,
+            start_time_patch: now_p,
             state: Running {
                 lap_start_time: now,
+                lap_start_time_p: now_p,
             },
             cur_suspend: Duration::new(0, 0),
             total_suspend: Duration::new(0, 0),
@@ -50,12 +65,16 @@ impl StopWatch {
     pub fn suspend(&mut self) {
         if let Running {
             lap_start_time: start_time,
+            lap_start_time_p: start_time_patch,
         } = self.state
         {
             let now = Instant::now();
+            let now_p = miniquad::date::now();
             self.state = Stopped {
                 lap_start_time: start_time,
+                lap_start_time_p: start_time_patch,
                 suspend_time: now,
+                suspend_time_p: now_p
             };
         }
     }
@@ -63,15 +82,20 @@ impl StopWatch {
     pub fn resume(&mut self) {
         if let Stopped {
             lap_start_time: start_time,
+            lap_start_time_p: start_time_patch,
             suspend_time,
+            suspend_time_p
         } = self.state
         {
             let now = Instant::now();
+            let now_p = miniquad::date::now();
+            let suspend_time_p = Duration::new((now_p - suspend_time_p) as u64, 0);
             let suspend_time = now.duration_since(suspend_time);
-            self.cur_suspend += suspend_time;
-            self.total_suspend += suspend_time;
+            self.cur_suspend += suspend_time_p;
+            self.total_suspend += suspend_time_p;
             self.state = Running {
                 lap_start_time: start_time,
+                lap_start_time_p: start_time_patch,
             }
         }
     }
@@ -80,23 +104,35 @@ impl StopWatch {
         match self.state {
             State::Running {
                 lap_start_time: start_time,
+                lap_start_time_p: start_time_patch,
             } => {
                 let now = Instant::now();
+                let now_p = miniquad::date::now();
+                // let lap_p = now_p - start_time_patch - Duration::as_secs_f64(&self.cur_suspend);
+                let lap_p = Duration::new((now_p - start_time_patch) as u64, 0) - self.cur_suspend;
                 let lap = now.duration_since(start_time) - self.cur_suspend;
+                let split_p = Duration::new((now_p - start_time_patch) as u64, 0) - self.total_suspend;
+                // let split_p = now_p - start_time_patch - Duration::as_secs_f64(&self.total_suspend);
                 let split = now.duration_since(self.start_time) - self.total_suspend;
                 self.state = Running {
                     lap_start_time: now,
+                    lap_start_time_p: now_p,
                 };
                 self.cur_suspend = Duration::new(0, 0);
-                Split { split, lap }
+                println!("{} {}", lap.as_millis(), split.as_millis());
+                Split { split: split_p, lap: lap_p }
             }
             State::Stopped {
                 lap_start_time: start_time,
+                lap_start_time_p: start_time_patch,
                 suspend_time,
+                suspend_time_p
             } => {
+                let lap_p = suspend_time_p - start_time_patch - Duration::as_secs_f64(&self.cur_suspend);
                 let lap = suspend_time.duration_since(start_time) - self.cur_suspend;
+                let split_p = suspend_time_p - start_time_patch - Duration::as_secs_f64(&self.total_suspend);
                 let split = suspend_time.duration_since(self.start_time) - self.total_suspend;
-                Split { split, lap }
+                Split { split: Duration::from_secs_f64(split_p), lap: Duration::from_secs_f64(lap_p) }
             }
         }
     }

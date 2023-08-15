@@ -3,14 +3,15 @@ use std::collections::HashMap;
 use instant::Duration;
 use keyframe::{Keyframe, functions::{EaseOut, EaseInOut}};
 use macroquad::prelude::*;
+use tween::{Tweener, SineOut};
 
-use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup, Direction};
+use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup, Direction, TestTween};
 use super::{col, get_dir_, dist};
 
 pub struct DeadEnemy {
     pub position: Position,
     pub move_tween: Tween,
-    pub opacity_tween: Tween,
+    pub opacity_tween: TestTween<f32, f32>,
     pub active: bool,
     pub curr_frame: Option<Rect>
 }
@@ -26,16 +27,8 @@ impl DeadEnemy {
             1,
             false,
         );
-        let opacity_tween = Tween::from_keyframes(
-            vec![
-                Keyframe::new(1.0, 0.0, EaseOut),
-                Keyframe::new(0.0, 0.2, EaseOut),
-            ],
-            0,
-            1,
-            false,
-        );
 
+        let opacity_tween : TestTween<f32, f32> = Tweener::new(1.0, 0., 1.5, Box::new(SineOut));
         DeadEnemy { position: Position { x, y }, move_tween, opacity_tween, active: true, curr_frame: frame }
     }
 }
@@ -196,7 +189,7 @@ pub fn update_dead_enemies(enemies: &mut Vec<DeadEnemy>, x: &mut f32) {
     let delta = get_frame_time();
     for e in enemies.iter_mut() {
         e.move_tween.update();
-        e.opacity_tween.update();
+        e.opacity_tween.move_by(delta);
         if e.position.x > *x {
             e.position.x += e.move_tween.value() * delta;
         } else {
@@ -209,7 +202,7 @@ pub fn update_dead_enemies(enemies: &mut Vec<DeadEnemy>, x: &mut f32) {
 }
 
 pub fn draw_dead_enemies(texture: Texture2D, enemies: &mut Vec<DeadEnemy>, x: &mut f32, y: &mut f32) {
-    for e in enemies.iter() {
+    for e in enemies.iter_mut() {
         if e.active {
             let mut flip = false;
             if e.position.x > *x {
@@ -219,7 +212,7 @@ pub fn draw_dead_enemies(texture: Texture2D, enemies: &mut Vec<DeadEnemy>, x: &m
                 texture, 
                 e.position.x,
                 e.position.y,
-                Color::new(1.0, 1.0, 1.0, e.opacity_tween.value()),
+                Color::new(1.0, 1.0, 1.0, e.opacity_tween.move_by(get_frame_time())),
         DrawTextureParams { 
                     dest_size: Some(vec2(8., 8.)), 
                     source: e.curr_frame,
