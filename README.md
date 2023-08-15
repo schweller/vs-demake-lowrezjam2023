@@ -1,8 +1,15 @@
 # Mage Rush
 
-A micro vampire-survivors like game, done for LowRezJam2023.
 
-Clone and cargo run. Have fun!
+<center>
+
+![Main logo](img/vs-dx-itchio.png "Mage Rush")
+
+**A micro vampire-survivors like game, done for LowRezJam2023**.
+Playable in-browser demo: https://iinacho.itch.io/mage-rush
+</center>
+
+Or just clone and cargo run. Have fun!
 
 ## Core loop
 
@@ -30,3 +37,5 @@ P.S.: I'm not a great game designer, so I can imagine some mechanics are very ch
 ## What's next
 
 Maybe I will update the game for a post-jam version with some improvements, maybe not. For instance, I would love to polish more and code proper collision avoidance.
+
+Have a cool idea? Hit me up on Twitter: https://twitter.com/inacho_
