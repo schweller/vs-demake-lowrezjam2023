@@ -1,5 +1,4 @@
 use macroquad::prelude::*;
-use tween::{Looper, Tweener, SineInOut, BounceInOut, Oscillator, CircInOut};
 
 use crate::{timer::Timer, Upgrade, tween::Tween, TestTween};
 
@@ -7,8 +6,8 @@ pub fn draw_level_ui(
     texture: Texture2D,
     current_player_hp_percentage: &f32,
     current_player_xp_percentage: &f32,
-    player_level: &i32,
-    player_inv_timer: &Timer
+    _player_level: &i32,
+    _player_inv_timer: &Timer
 ) {
     draw_rectangle(0., screen_height() - 80., screen_width(), 120., BLACK);
     let zoom = 10.;
@@ -81,7 +80,7 @@ pub fn draw_level_timer_ui(
 
 pub fn draw_level_up_title(
     font: Font,
-    tween: &mut TestTween<f32, f32>,
+    _tween: &mut TestTween<f32, f32>,
     letter_tween: &mut TestTween<f32, f32>
 ) {
     let delta = get_frame_time();
@@ -154,7 +153,7 @@ pub fn draw_level_up(
     available_upgrades: &Vec<Box<dyn Upgrade>>,
     font: Font,
     tween: &mut Tween,
-    init_tween: &mut TestTween<f32, f32>
+    _init_tween: &mut TestTween<f32, f32>
 ) {
     // Level UP UI
     tween.update();
@@ -184,7 +183,3 @@ pub fn draw_level_up(
         );
     }
 }
-
-pub fn draw_stage_cleared() {
-    
-} 

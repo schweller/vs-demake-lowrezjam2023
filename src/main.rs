@@ -7,6 +7,8 @@ mod timer;
 mod upgrade;
 mod tween;
 mod enemies;
+mod direction;
+mod player;
 mod damage_popup;
 mod animation;
 mod particles;
@@ -63,76 +65,6 @@ const PLAYER_SPEED: f32 = 10.;
 // ============================================================================
 // GAME STATE STRUCTS
 // ============================================================================
-
-pub struct Player {
-    pub pos_x: f32,
-    pub pos_y: f32,
-    pub hp: f32,
-    pub max_hp: f32,
-    pub xp: f32,
-    pub max_xp: f32,
-    pub level: i32,
-    pub flip_x: bool,
-    pub speed_bonus: f32,
-    pub regen: f32,
-    pub regen_timer: Timer,
-    pub inv_timer: Timer,
-    pub is_dashing: bool,
-    pub direction: Option<Direction>,
-    pub dashing_timer: Timer,
-    pub dash_speed: f32,
-    pub active: bool,
-    pub damage: f32,
-}
-
-impl Player {
-    pub fn new() -> Self {
-        Player {
-            pos_x: 128.,
-            pos_y: 128.,
-            hp: 100.,
-            max_hp: 100.,
-            xp: 0.,
-            max_xp: 100.,
-            level: 1,
-            flip_x: false,
-            speed_bonus: 1.,
-            regen: 1.,
-            regen_timer: Timer::new(5000),
-            inv_timer: Timer::new(1800),
-            is_dashing: false,
-            direction: None,
-            dashing_timer: Timer::new(500),
-            dash_speed: 40.0,
-            active: true,
-            damage: 2.,
-        }
-    }
-
-    pub fn take_damage(&mut self, amount: f32) {
-        self.hp = (self.hp - amount).max(0.);
-    }
-
-    pub fn heal(&mut self, amount: f32) {
-        self.hp = (self.hp + amount).min(self.max_hp);
-    }
-
-    pub fn add_xp(&mut self, amount: f32) {
-        self.xp += amount;
-    }
-
-    pub fn level_up(&mut self) {
-        self.xp = 0.;
-        self.level += 1;
-    }
-
-    pub fn position(&self) -> Position {
-        Position {
-            x: self.pos_x,
-            y: self.pos_y,
-        }
-    }
-}
 
 pub struct World {
     pub enemies: Vec<Enemies>,
@@ -297,7 +229,7 @@ impl Renderer {
 }
 
 pub struct GameSession {
-    pub player: Player,
+    pub player: player::Player,
     pub world: World,
     pub renderer: Renderer,
     pub main_texture: Texture2D,
@@ -312,7 +244,7 @@ pub struct GameSession {
 impl GameSession {
     pub async fn new() -> Result<Self, macroquad::prelude::FileError> {
         Ok(GameSession {
-            player: Player::new(),
+            player: player::Player::new(),
             world: World::new(),
             renderer: Renderer::new(),
             main_texture: load_texture("assets/vs-dx-atlas-padded.png").await.unwrap(),
@@ -326,7 +258,7 @@ impl GameSession {
     }
 
     pub fn reset(&mut self) {
-        self.player = Player::new();
+        self.player = player::Player::new();
         self.world.reset();
         self.renderer.reset();
     }
@@ -378,7 +310,7 @@ fn sprite_rect(ix: u32) -> Rect {
     Rect::new(sx + 1., sy + 1., sw - 2.2, sh - 2.2)
 }
 
-fn draw_player(texture: Texture2D, frame: Option<Rect>, player: &Player) {
+fn draw_player(texture: Texture2D, frame: Option<Rect>, player: &player::Player) {
     let mut color = WHITE;
     if player.inv_timer.value() != 1.0 {
         color = Color::new(1.0, 0., 0., 1.);
@@ -611,7 +543,7 @@ pub fn axis(negative: bool, positive: bool) -> f32 {
     ((positive as i8) - (negative as i8)) as f32
 }
 
-fn move_player(player: &mut Player, delta: f32) {
+fn move_player(player: &mut player::Player, delta: f32) {
     let a = axis(is_key_down(KeyCode::Left), is_key_down(KeyCode::Right));
     let b = axis(is_key_down(KeyCode::Down), is_key_down(KeyCode::Up));
     let magnitude = (a.powi(2) + b.powi(2)).sqrt();
@@ -656,47 +588,6 @@ fn get_seconds_from_millis(elapsed_time: u128) -> String {
 }
 
 pub type TestTween<Value, Time> = Tweener<Value, Time, Box<dyn ::tween::Tween<Value>>>;
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Direction {
-    Up, Down, Left, Right, UpLeft, UpRight, DownLeft, DownRight,
-}
-
-pub fn get_direction() -> Option<Direction> {
-    let mut dir_vec = vec2(0.,0.);
-    
-    if is_key_down(KeyCode::Up) {
-        dir_vec.y = -1.;
-    } 
-    if is_key_down(KeyCode::Down) {
-        dir_vec.y = 1.; 
-    }
-     if is_key_down(KeyCode::Left) {
-        dir_vec.x = -1.;
-    }
-    if is_key_down(KeyCode::Right) {
-        dir_vec.x = 1.;
-    }
-
-    if dir_vec.x == 0. && dir_vec.y == -1. {
-        Some(Direction::Up)
-    } else if dir_vec.x == 0. && dir_vec.y == 1. {
-        Some(Direction::Down)
-    } else if dir_vec.x == -1. && dir_vec.y == 0. {
-        Some(Direction::Left)
-    } else if dir_vec.x == 1. && dir_vec.y == 0. {
-        Some(Direction::Right)
-    } else if dir_vec.x == 1. && dir_vec.y == 1. {
-        Some(Direction::DownRight)
-    } else if dir_vec.x == -1. && dir_vec.y == -1. {
-        Some(Direction::UpLeft)
-    } else if dir_vec.x == 1. && dir_vec.y == -1. {
-        Some(Direction::UpRight)
-    } else if dir_vec.x == -1. && dir_vec.y == 1. {
-        Some(Direction::DownLeft)
-    } else {
-        None
-    }
-}
 
 pub fn update_progress_level(progression: &mut f32, kill_count: i32) {
     // println!(" rem {}", kill_count.rem_euclid(15));
@@ -789,7 +680,7 @@ async fn main() {
                 if session.player.active {
                     // Move and Dashing input block
                     if is_key_pressed(KeyCode::X) && !session.player.is_dashing {
-                        session.player.direction = get_direction();
+                        session.player.direction = direction::get_direction();
                         if let Some(_dir) = session.player.direction {
                             session.player.dashing_timer.restart();
                             session.player.is_dashing = true;
@@ -826,23 +717,23 @@ async fn main() {
                     // Update player position based on dash direction
                     // 0.7071 was pure experimentation
                     match session.player.direction {
-                        Some(Direction::Up) => session.player.pos_y -= dash_distance,
-                        Some(Direction::Down) => session.player.pos_y += dash_distance,
-                        Some(Direction::Left) => session.player.pos_x -= dash_distance,
-                        Some(Direction::Right) => session.player.pos_x += dash_distance,
-                        Some(Direction::UpLeft) => {
+                        Some(direction::Direction::Up) => session.player.pos_y -= dash_distance,
+                        Some(direction::Direction::Down) => session.player.pos_y += dash_distance,
+                        Some(direction::Direction::Left) => session.player.pos_x -= dash_distance,
+                        Some(direction::Direction::Right) => session.player.pos_x += dash_distance,
+                        Some(direction::Direction::UpLeft) => {
                             session.player.pos_x -= dash_distance * 0.7071;
                             session.player.pos_y -= dash_distance * 0.7071;
                         }
-                        Some(Direction::UpRight) => {
+                        Some(direction::Direction::UpRight) => {
                             session.player.pos_x += dash_distance * 0.7071;
                             session.player.pos_y -= dash_distance * 0.7071;
                         }
-                        Some(Direction::DownLeft) => {
+                        Some(direction::Direction::DownLeft) => {
                             session.player.pos_x -= dash_distance * 0.7071;
                             session.player.pos_y += dash_distance * 0.7071;
                         }
-                        Some(Direction::DownRight) => {
+                        Some(direction::Direction::DownRight) => {
                             session.player.pos_x += dash_distance * 0.7071;
                             session.player.pos_y += dash_distance * 0.7071;
                         }

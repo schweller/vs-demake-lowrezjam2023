@@ -5,7 +5,7 @@ use keyframe::{Keyframe, functions::{EaseOut, EaseInOut}};
 use macroquad::prelude::*;
 use tween::{Tweener, SineOut};
 
-use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup, Direction, TestTween};
+use crate::{Position, Collider, timer::Timer, tween::Tween, animation::Animation, Bullet, particles::{spawn_particle, ShotParticle, Particle, EnemyShotParticle}, damage_popup::DamagePopup, TestTween};
 use super::{col, get_dir_, dist};
 
 pub struct DeadEnemy {
